@@ -11,4 +11,4 @@ npx expo start
 
 Scan QR-koden med Expo Go, eller kør appen i en simulator/emulator.
 
-Demovideo: [SÆT LINK HER]
+Demovideo: https://youtube.com/shorts/Geu6l3Jtou8
