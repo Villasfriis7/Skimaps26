@@ -42,6 +42,4 @@ npm install
 npx expo start
 ```
 
-Scan QR-koden med Expo Go, eller kør appen i en simulator/emulator.
-
 Demovideo: https://youtube.com/shorts/dreyhnMPcoo?is=fh6kMi-d8DRQtNp1
