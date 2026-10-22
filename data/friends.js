@@ -1,0 +1,48 @@
+// Mock-data for venner - ingen rigtig backend/login endnu, så dette er eksempeldata
+// der viser, hvordan "venner på kortet" og "Friends"-fanen skal fungere i UI'et.
+export const friends = [
+  {
+    id: 'f1',
+    name: 'Emma',
+    initials: 'E',
+    color: '#e5673f',
+    online: true,
+    status: 'At Le Rouge',
+    minutesAway: 2,
+    latitude: 46.09370,
+    longitude: 7.23480,
+  },
+  {
+    id: 'f2',
+    name: 'Lucas',
+    initials: 'L',
+    color: '#3fa7d6',
+    online: true,
+    status: 'Skiing to Attelas',
+    minutesAway: 5,
+    latitude: 46.09460,
+    longitude: 7.25980,
+  },
+  {
+    id: 'f3',
+    name: 'Oliver',
+    initials: 'O',
+    color: '#2ecc71',
+    online: true,
+    status: 'At La Chaux',
+    minutesAway: 8,
+    latitude: 46.11600,
+    longitude: 7.22400,
+  },
+  {
+    id: 'f4',
+    name: 'Sophie',
+    initials: 'S',
+    color: '#9b59b6',
+    online: false,
+    status: 'At Farinet',
+    minutesAway: 12,
+    latitude: 46.09650,
+    longitude: 7.22850,
+  },
+];

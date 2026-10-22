@@ -1,7 +1,8 @@
-// Liste over cafeer og restauranter i Verbier skiområdet.
-// Bruges af MapScreen (markører), POIListScreen og POIDetailScreen.
-// latitude/longitude er tilnærmede placeringer nær de rigtige liftstationer
-// (se data/verbierMap.js for kilden til lift-/pistedata).
+// Kuraterede cafeer og restauranter i Verbier skiområdet, med håndskrevne
+// gåtids-/rutebeskrivelser. Bruges af MapScreen (markører), ExploreScreen
+// (Featured) og POIDetailScreen. Koordinater og kontaktinfo er verificeret
+// mod rigtige OpenStreetMap-data (se data/places.js for den bredere,
+// ikke-kuraterede liste af 363 rigtige steder i området).
 export const pois = [
   {
     id: '1',
@@ -10,8 +11,11 @@ export const pois = [
     description: 'Populær restaurant og bar lige ved Médran-liftens bundstation i Verbier by. Solterrasse og livlig stemning efter skidagen.',
     walkTime: '2 min fra Médran-liften',
     route: 'Stå af Médran-gondolen ved bundstationen i Verbier by, gå til venstre langs pladsen - Le Rouge ligger 2 min derfra.',
-    latitude: 46.09330,
-    longitude: 7.23410,
+    latitude: 46.10055,
+    longitude: 7.23033,
+    phone: '+41 27 771 80 00',
+    website: null,
+    openingHours: null,
   },
   {
     id: '2',
@@ -20,8 +24,11 @@ export const pois = [
     description: 'Klassisk bjergrestaurant i skoven ved Savoleyres, kendt for hjemmelavet mad og hyggelig atmosfære langt fra pisterne.',
     walkTime: '10 min fra Savoleyres-liften',
     route: 'Fra toppen af Savoleyres-gondolen, følg stien mod Clambin/skoven i ca. 10 min - Chez Dany ligger midt i skoven.',
-    latitude: 46.10750,
-    longitude: 7.22300,
+    latitude: 46.08674,
+    longitude: 7.23637,
+    phone: '+41 27 7712524',
+    website: 'https://www.chezdany.ch/',
+    openingHours: 'Mo-Su 12:00-22:00',
   },
   {
     id: '3',
@@ -32,6 +39,9 @@ export const pois = [
     route: 'Stå af Attelas-stolelften ved topstationen og gå ligeud - Le Carrefour ligger lige ved siden af liften.',
     latitude: 46.09820,
     longitude: 7.27180,
+    phone: null,
+    website: null,
+    openingHours: null,
   },
   {
     id: '4',
@@ -42,6 +52,9 @@ export const pois = [
     route: 'Fra toppen af Lac des Vaux-stolelften, følg skiltene mod "Cabane du Mont-Fort" til fods i ca. 15 min opad.',
     latitude: 46.10150,
     longitude: 7.27400,
+    phone: null,
+    website: null,
+    openingHours: null,
   },
   {
     id: '5',
@@ -52,5 +65,8 @@ export const pois = [
     route: 'Fra toppen af Savoleyres-gondolen kør ned mod La Chaux - restauranten ligger ved siden af den røde Attelas-pist.',
     latitude: 46.11900,
     longitude: 7.22100,
+    phone: null,
+    website: null,
+    openingHours: null,
   },
 ];
