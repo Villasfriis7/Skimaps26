@@ -14,8 +14,9 @@ og denne README er på dansk.
 - **Map** - interaktivt kort over Verbier med ægte geodata fra OpenStreetMap/OpenSkiMap:
   47 lifter, 275 pist-stykker (farvet efter rigtig sværhedsgrad), 322 steder
   (restauranter/caféer/après-ski/hoteller/ski rental) og 20 offentlige toiletter.
-  Baggrunden er swisstopos terrænkort, så bjergene ses som snedækket relief; zoomer man
-  ind, anes gader, højdekurver og stednavne, og en knap skifter til det fulde vinter-landkort.
+  Baggrunden er telefonens eget terrænkort (Apple Maps/Google Maps), så der er et rigtigt
+  kort overalt i verden; en knap skifter til satellit. I Schweiz lægges swisstopos kort
+  ovenpå: bjergene som snedækket relief og, når man zoomer ind, gader, højdekurver og stednavne.
   Stregtykkelse og detaljer følger zoom: på afstand er steder små prikker, tæt på får de
   ikoner, og lifterne får stationer og navne. Filtrérbart via kategori-chips. Tryk på en lift
   eller pist for navn, type, længde og højdeforskel. "Min position"-knappen beder om
@@ -62,10 +63,10 @@ Mock-data (opdigtet eksempeldata): venner, partner-rabatter og brugerprofilen.
 
 - Kort- og stedsdata © [OpenStreetMap](https://www.openstreetmap.org/copyright)-bidragydere
   (ODbL), lift- og pistedata via [OpenSkiMap](https://openskimap.org).
-- Baggrundskort (terrænskygge og vinter-landkort) fra Federal Office of Topography
-  [©swisstopo](https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices).
-  Fliserne er gratis og kræver ingen API-nøgle, men dækker kun Schweiz, og tjenesten har
-  en fair use-grænse.
+- Baggrundskort: Apple Maps på iOS og Google Maps på Android (krediteres af kortet selv).
+  I Schweiz desuden terrænskygge og vinter-landkort fra Federal Office of Topography
+  [©swisstopo](https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices):
+  gratis og uden API-nøgle, men med en fair use-grænse.
 - Vejr- og højdedata fra [Open-Meteo](https://open-meteo.com) (CC BY 4.0).
 
 Alle tre krediteres også inde i appen (under kortet og på vejrsiden).

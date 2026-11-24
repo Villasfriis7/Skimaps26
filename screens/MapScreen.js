@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Alert, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Polyline, Polygon, Circle, Marker, Callout, UrlTile } from 'react-native-maps';
+import MapView, { Polyline, Circle, Marker, Callout, UrlTile } from 'react-native-maps';
 import { lifts, pistes, pisteColors, verbierRegion, towns } from '../data/verbierMap';
 import { elevations } from '../data/elevations';
 import { pois } from '../data/pois';
@@ -45,6 +45,7 @@ const defaultActive = { ...allOff, restaurant: true, cafe: true, toilets: true, 
 const downhillPisteCount = pistes.filter((piste) => pisteKind(piste) === 'downhill').length;
 
 const LIFT_COLOR = '#2b3a42';
+const LIFT_COLOR_ON_SATELLITE = '#ffffff'; // mørke lifter forsvinder på et satellitfoto
 
 const legendItems = [
   { label: 'Lift', color: LIFT_COLOR },
@@ -57,30 +58,33 @@ const legendItems = [
   { label: 'Sled run', color: colors.sled },
 ];
 
-// Baggrundskortet er swisstopos åbne kortfliser (Schweiz' kortstyrelse):
-// gratis, ingen API-nøgle, men kildeangivelsen "©swisstopo" er et krav.
-//   relief: lys terrænskygge - ligner et snedækket bjerglandskab og lader
-//           vores egne lifter og pister være det, man ser.
-//   topo:   det officielle vinter-landkort med højdekurver, veje, huse og
-//           stednavne - godt, når man er zoomet ind i byen.
-// Fliserne findes for zoom 8-19 og kun for Schweiz (hele vores område).
-const TILE_BASE = 'https://wmts.geo.admin.ch/1.0.0';
-const baseMaps = {
-  relief: `${TILE_BASE}/ch.swisstopo.leichte-basiskarte_reliefschattierung/default/current/3857/{z}/{x}/{y}.png`,
-  topo: `${TILE_BASE}/ch.swisstopo.pixelkarte-farbe-winter/default/current/3857/{z}/{x}/{y}.jpeg`,
+// BAGGRUNDSKORT - skal virke i hele verden, ikke kun i Verbier.
+//
+// Bunden er altid telefonens eget kort (Apple Maps på iOS, Google Maps på
+// Android). Det dækker hele kloden, koster ikke noget, kræver ingen ekstern
+// server og gemmes af telefonen selv. To visninger, som lag-knappen skifter
+// imellem:
+//   terrain:   terrænkort med skygger, veje og stednavne i dæmpede farver,
+//              så pisterne står tydeligt.
+//   satellite: satellitfoto med stednavne.
+//
+// Oven på terrænkortet lægges swisstopos åbne kortfliser, HVOR DE FINDES
+// (Schweiz og Liechtenstein). Uden for Schweiz svarer swisstopo med tomme,
+// gennemsigtige fliser, så dér ser man bare telefonens kort. swisstopo er
+// gratis og uden API-nøgle, men kildeangivelsen "©swisstopo" er et krav.
+//   swissRelief: lys terrænskygge - bjergene som snedækket relief.
+//   swissTopo:   vinter-landkortet, lagt svagt ovenpå fra zoom 14, så gader,
+//                højdekurver og stednavne anes.
+const nativeMapType = {
+  terrain: Platform.OS === 'android' ? 'terrain' : 'mutedStandard',
+  satellite: 'hybrid',
 };
-const MAX_TILE_ZOOM = 19;
-const DETAIL_FROM_ZOOM = 14; // herfra vises vinterkortet svagt oven på terrænet
 
-// Ensfarvet "sne" under fliserne på Android, så kortet ikke er gråt, mens
-// fliserne hentes, eller hvis der ikke er net. (På iOS lægger kortbiblioteket
-// altid flise-laget nederst og ville tegne fladen ovenpå, så dér udelades den.)
-const snowCover = [
-  { latitude: 60, longitude: -15 },
-  { latitude: 60, longitude: 30 },
-  { latitude: 30, longitude: 30 },
-  { latitude: 30, longitude: -15 },
-];
+const SWISSTOPO = 'https://wmts.geo.admin.ch/1.0.0';
+const swissRelief = `${SWISSTOPO}/ch.swisstopo.leichte-basiskarte_reliefschattierung/default/current/3857/{z}/{x}/{y}.png`;
+const swissTopo = `${SWISSTOPO}/ch.swisstopo.pixelkarte-farbe-winter/default/current/3857/{z}/{x}/{y}.jpeg`;
+const MAX_TILE_ZOOM = 19;
+const DETAIL_FROM_ZOOM = 14;
 
 // Hvor tæt er der zoomet ind? Styrer stregtykkelse og hvor mange detaljer,
 // der vises, så oversigten ikke drukner i streger og nåle.
@@ -151,8 +155,9 @@ function describeLine(selected) {
 
 // Rigtigt interaktivt kort over Verbier. Lifter og pister er ægte geodata
 // (data/verbierMap.js), steder kommer fra OpenStreetMap (data/places.js) og
-// filtreres med chips øverst. Baggrunden er swisstopos terrænkort (se
-// baseMaps ovenfor). Stregtykkelse og detaljer følger zoom-niveauet. Tryk på
+// filtreres med chips øverst. Baggrunden er telefonens terrænkort, i Schweiz
+// med swisstopo ovenpå (se BAGGRUNDSKORT øverst). Stregtykkelse og detaljer
+// følger zoom-niveauet. Tryk på
 // en lift eller pist for at se navn, type og længde i kortet nederst.
 //
 // Andre skærme kan styre kortet via route.params (altid sammen med en ny
@@ -174,7 +179,7 @@ export default function MapScreen({ navigation, route }) {
   // kind er 'lift' | 'piste' | 'place' | 'friend'.
   const [selected, setSelected] = useState(null);
   const [level, setLevel] = useState(() => zoomLevelFor(verbierRegion));
-  const [baseMap, setBaseMap] = useState('relief'); // 'relief' | 'topo'
+  const [baseMap, setBaseMap] = useState('terrain'); // 'terrain' | 'satellite'
 
   // Kaldes, når brugeren er færdig med at panorere/zoome. setLevel med samme
   // værdi som før udløser ingen ny tegning, så det er billigt at kalde hver gang.
@@ -184,12 +189,12 @@ export default function MapScreen({ navigation, route }) {
     setLevel(zoomLevelFor(region));
   };
 
-  // Skift mellem terræn og detaljeret vinterkort. Kortet bygges forfra
-  // (key={baseMap} på MapView) i det udsnit, man stod i: på iOS ender et
-  // flise-lag, der tilføjes senere, ellers OVEN PÅ pister og lifter.
+  // Skift mellem terrænkort og satellit. Kortet bygges forfra (key={baseMap}
+  // på MapView) i det udsnit, man stod i: på iOS ender flise-lag, der tilføjes
+  // efter de andre lag, ellers OVEN PÅ pister og lifter.
   const toggleBaseMap = () => {
     mapReady.current = false;
-    setBaseMap((current) => (current === 'relief' ? 'topo' : 'relief'));
+    setBaseMap((current) => (current === 'terrain' ? 'satellite' : 'terrain'));
   };
 
   const toggleFilter = (id) => setActive((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -281,14 +286,14 @@ export default function MapScreen({ navigation, route }) {
         <Polyline
           key={lift.id}
           coordinates={lift.coordinates}
-          strokeColor={LIFT_COLOR}
-          strokeWidth={LIFT_WIDTH[level]}
+          strokeColor={baseMap === 'satellite' ? LIFT_COLOR_ON_SATELLITE : LIFT_COLOR}
+          strokeWidth={LIFT_WIDTH[level] + (baseMap === 'satellite' ? 0.5 : 0)}
           zIndex={2}
           tappable
           onPress={() => setSelected({ kind: 'lift', item: lift })}
         />
       )),
-    [level]
+    [level, baseMap]
   );
 
   const pisteLines = useMemo(
@@ -311,6 +316,32 @@ export default function MapScreen({ navigation, route }) {
         );
       }),
     [level]
+  );
+
+  // Sorte pister kan ikke ses på et mørkt satellitfoto, så dér får de en hvid
+  // kant: den samme linje tegnet lidt bredere i hvid nedenunder.
+  const blackPisteCasings = useMemo(
+    () =>
+      baseMap !== 'satellite'
+        ? null
+        : pistes
+            .filter(
+              (piste) =>
+                pisteKind(piste) === 'downhill' &&
+                ['advanced', 'expert', 'extreme'].includes(piste.difficulty)
+            )
+            .map((piste) => (
+              <Polyline
+                key={`casing-${piste.id}`}
+                coordinates={piste.coordinates}
+                strokeColor={colors.white}
+                strokeWidth={PISTE_WIDTH[level] + 2.5}
+                lineCap="round"
+                lineJoin="round"
+                zIndex={0}
+              />
+            )),
+    [level, baseMap]
   );
 
   // Liftstationer som små ringe. Radius er i meter, så de følger zoom af sig selv.
@@ -395,10 +426,7 @@ export default function MapScreen({ navigation, route }) {
           ref={mapRef}
           style={styles.map}
           initialRegion={lastRegion.current}
-          // Vores egne fliser erstatter baggrundskortet. "none" findes kun på
-          // Android; på iOS er "satellite" den eneste type uden Apples bynavne
-          // og veje ovenpå (afprøvet i simulatoren).
-          mapType={Platform.OS === 'android' ? 'none' : 'satellite'}
+          mapType={nativeMapType[baseMap]}
           showsUserLocation={permission === 'granted'}
           showsMyLocationButton={false}
           showsPointsOfInterests={false}
@@ -411,23 +439,16 @@ export default function MapScreen({ navigation, route }) {
           onMapReady={onMapReady}
           onRegionChangeComplete={onRegionChangeComplete}
         >
-          {Platform.OS === 'android' && (
-            <Polygon coordinates={snowCover} fillColor={colors.iceLight} strokeWidth={0} zIndex={-2} />
+          {/* Rækkefølgen her er lagenes rækkefølge, nederst først. zIndex gør
+              det samme på Android; på iOS er det rækkefølgen, der tæller.
+              (Et hvidt "snelag" oven på telefonens kort er prøvet og droppet:
+              det gjorde terrænet for blegt og lagde sig over swisstopo.) */}
+          {baseMap === 'terrain' && (
+            <UrlTile urlTemplate={swissRelief} maximumZ={MAX_TILE_ZOOM} tileSize={256} zIndex={-2} />
           )}
-          <UrlTile
-            urlTemplate={baseMaps[baseMap]}
-            maximumZ={MAX_TILE_ZOOM}
-            tileSize={256}
-            shouldReplaceMapContent
-            zIndex={-1}
-          />
-          {/* Tæt på har terrænskyggen ikke mere at vise. Dér lægges vinterkortet
-              svagt ovenpå, så gader, huse, højdekurver og stednavne anes uden
-              at overdøve pisterne. `minimumZ` gør, at laget slet ikke hentes,
-              når man er zoomet ud. */}
-          {baseMap === 'relief' && (
+          {baseMap === 'terrain' && (
             <UrlTile
-              urlTemplate={baseMaps.topo}
+              urlTemplate={swissTopo}
               minimumZ={DETAIL_FROM_ZOOM}
               maximumZ={MAX_TILE_ZOOM}
               tileSize={256}
@@ -437,6 +458,7 @@ export default function MapScreen({ navigation, route }) {
           )}
 
           {/* Pister (farvet efter sværhedsgrad), lifter ovenpå, stationer øverst */}
+          {blackPisteCasings}
           {pisteLines}
           {liftLines}
           {stationCircles}
@@ -469,8 +491,9 @@ export default function MapScreen({ navigation, route }) {
             </>
           )}
 
-          {/* Bynavne - terrænkortet har ingen tekst (topo-kortet har sine egne) */}
-          {baseMap === 'relief' &&
+          {/* Vores egne bynavne for skiområdets byer. På satellit er telefonens
+              egne stednavne tydelige nok. */}
+          {baseMap === 'terrain' &&
             towns.map((town) => (
               <Marker
                 key={town.id}
@@ -625,16 +648,16 @@ export default function MapScreen({ navigation, route }) {
             <Ionicons name="locate" size={22} color={colors.primary} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.mapButton, baseMap === 'topo' && styles.mapButtonActive]}
+            style={[styles.mapButton, baseMap === 'satellite' && styles.mapButtonActive]}
             onPress={toggleBaseMap}
             accessibilityLabel={
-              baseMap === 'relief' ? 'Switch to detailed topographic map' : 'Switch to terrain map'
+              baseMap === 'terrain' ? 'Switch to satellite map' : 'Switch to terrain map'
             }
           >
             <Ionicons
               name="layers"
               size={21}
-              color={baseMap === 'topo' ? colors.white : colors.primary}
+              color={baseMap === 'satellite' ? colors.white : colors.primary}
             />
           </TouchableOpacity>
         </View>
