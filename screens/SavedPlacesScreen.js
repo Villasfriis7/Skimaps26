@@ -1,8 +1,10 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
 import { categoryMeta } from '../data/categoryMeta';
+import { placeCategory } from '../utils/places';
 import { styles, colors } from '../styles/styles';
 
 // Viser brugerens gemte steder - rigtige data fra AsyncStorage (via
@@ -14,19 +16,20 @@ export default function SavedPlacesScreen({ navigation }) {
   if (savedPlaces.length === 0) {
     return (
       <View style={styles.centeredContainer}>
+        <StatusBar style="light" />
         <Ionicons name="heart-outline" size={48} color={colors.textMuted} />
         <Text style={[styles.subtitle, { marginTop: 12, textAlign: 'center' }]}>
-          Ingen gemte steder endnu
+          No saved places yet
         </Text>
-        <Text style={{ color: colors.textMuted, textAlign: 'center', marginTop: 4 }}>
-          Tryk på hjertet på et sted for at gemme det her.
+        <Text style={[styles.mutedText, { textAlign: 'center', marginTop: 4 }]}>
+          Tap the heart on a place to save it here.
         </Text>
       </View>
     );
   }
 
   const renderItem = ({ item }) => {
-    const meta = categoryMeta[item.category || item.type] || categoryMeta.restaurant;
+    const meta = categoryMeta[placeCategory(item)] || categoryMeta.restaurant;
     return (
       <TouchableOpacity
         style={styles.listItem}
@@ -39,7 +42,11 @@ export default function SavedPlacesScreen({ navigation }) {
           <Text style={styles.listItemTitle}>{item.name}</Text>
           <Text style={styles.listItemSubtitle}>{meta.label}</Text>
         </View>
-        <TouchableOpacity onPress={() => removeSaved(item.id)} hitSlop={10}>
+        <TouchableOpacity
+          onPress={() => removeSaved(item.id)}
+          hitSlop={10}
+          accessibilityLabel={`Remove ${item.name} from saved places`}
+        >
           <Ionicons name="trash-outline" size={20} color={colors.textMuted} />
         </TouchableOpacity>
       </TouchableOpacity>
@@ -48,8 +55,11 @@ export default function SavedPlacesScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <StatusBar style="light" />
       <View style={styles.screenHeader}>
-        <Text style={styles.screenHeaderSubtitle}>{savedPlaces.length} gemte steder</Text>
+        <Text style={styles.screenHeaderSubtitle}>
+          {savedPlaces.length} saved {savedPlaces.length === 1 ? 'place' : 'places'}
+        </Text>
       </View>
       <FlatList
         data={savedPlaces}

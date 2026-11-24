@@ -1,34 +1,51 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Alert, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { styles, colors } from '../styles/styles';
 import { categoryMeta } from '../data/categoryMeta';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
+import { placeCategory, nearestLiftStation, formatCuisine, findPlace } from '../utils/places';
+import { liftTypeLabels } from '../utils/pistes';
+import { formatDistance } from '../utils/geo';
+import { isOpenNow } from '../utils/openingHours';
+import { websiteUrl, phoneUrl, openLink } from '../utils/links';
 
 // Detaljeside for et enkelt sted - modtager stedet via route.params fra
-// Explore/Map. Viser altid de felter, der rent faktisk findes for stedet
-// (kuraterede steder har beskrivelse/rute, rigtige OSM-steder kan i stedet
-// have telefon/hjemmeside/åbningstider). Hjerte-knappen gemmer/fjerner stedet
-// i AsyncStorage via SavedPlacesContext - det eneste rigtige, brugerstyrede
-// data i appen, som huskes efter appen lukkes.
-export default function POIDetailScreen({ route }) {
+// Explore/Map/Saved places. Viser kun de felter, der rent faktisk findes for
+// stedet (OSM-steder har meget forskellig mængde info). "Nærmeste lift" og
+// "åben nu" beregnes ud fra data i stedet for at være skrevet i hånden.
+// Hjerte-knappen gemmer/fjerner stedet i AsyncStorage via SavedPlacesContext.
+export default function POIDetailScreen({ navigation, route }) {
   const { poi } = route.params;
-  const key = poi.category || poi.type;
-  const meta = categoryMeta[key] || categoryMeta.restaurant;
+  const meta = categoryMeta[placeCategory(poi)] || categoryMeta.restaurant;
   const { isSaved, toggleSave } = useSavedPlaces();
   const saved = isSaved(poi.id);
 
-  const visRute = () => {
-    Alert.alert('Rute til ' + poi.name, poi.route);
-  };
+  const nearest = nearestLiftStation(poi);
+  const open = isOpenNow(poi.openingHours); // true / false / null (ukendt)
+  const cuisine = formatCuisine(poi.cuisine);
+  const phone = phoneUrl(poi.phone);
+  const website = websiteUrl(poi.website);
+  // "Show on map" kræver, at stedet stadig findes i appens data.
+  const onMap = findPlace(poi.id) !== null;
 
-  const ring = () => Linking.openURL(`tel:${poi.phone}`);
-  const besøgHjemmeside = () => Linking.openURL(poi.website);
+  const showOnMap = () =>
+    navigation.popTo('MainTabs', {
+      screen: 'Map',
+      params: { focusPlaceId: poi.id, focusKey: Date.now() },
+    });
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      {/* Headeren er mørkeblå, så statusbarens tekst skal være lys her */}
+      <StatusBar style="light" />
       <View style={styles.card}>
-        <TouchableOpacity style={styles.saveButton} onPress={() => toggleSave(poi)}>
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={() => toggleSave(poi)}
+          accessibilityLabel={saved ? 'Remove from saved places' : 'Save place'}
+        >
           <Ionicons
             name={saved ? 'heart' : 'heart-outline'}
             size={20}
@@ -47,47 +64,68 @@ export default function POIDetailScreen({ route }) {
         <Text style={[styles.subtitle, { textAlign: 'center' }]}>{poi.name}</Text>
         {poi.description ? <Text style={styles.cardText}>{poi.description}</Text> : null}
 
-        {poi.walkTime ? (
+        {nearest ? (
           <View style={styles.infoRow}>
-            <Text style={styles.infoRowIcon}>🚶</Text>
-            <Text style={styles.infoRowText}>{poi.walkTime}</Text>
+            <Ionicons name="triangle-outline" size={16} color={colors.textDark} style={styles.infoRowIonicon} />
+            <Text style={styles.infoRowText}>
+              {formatDistance(nearest.meters)} from {nearest.lift.name} (
+              {(liftTypeLabels[nearest.lift.liftType] || 'lift').toLowerCase()},{' '}
+              {nearest.end === 'bottom' ? 'bottom station' : 'top station'})
+            </Text>
           </View>
         ) : null}
         {poi.address ? (
           <View style={styles.infoRow}>
-            <Ionicons name="location-outline" size={16} color={colors.textDark} style={{ marginRight: 8 }} />
+            <Ionicons name="location-outline" size={16} color={colors.textDark} style={styles.infoRowIonicon} />
             <Text style={styles.infoRowText}>{poi.address}</Text>
           </View>
         ) : null}
         {poi.openingHours ? (
           <View style={styles.infoRow}>
-            <Ionicons name="time-outline" size={16} color={colors.textDark} style={{ marginRight: 8 }} />
-            <Text style={styles.infoRowText}>{poi.openingHours}</Text>
+            <Ionicons name="time-outline" size={16} color={colors.textDark} style={styles.infoRowIonicon} />
+            <Text style={styles.infoRowText}>
+              {open !== null ? (
+                <Text style={open ? styles.openNow : styles.closedNow}>
+                  {open ? 'Open now' : 'Closed now'}
+                  {'  '}
+                </Text>
+              ) : null}
+              {poi.openingHours}
+            </Text>
           </View>
         ) : null}
-        {poi.cuisine ? (
+        {cuisine ? (
           <View style={styles.infoRow}>
-            <Ionicons name="restaurant-outline" size={16} color={colors.textDark} style={{ marginRight: 8 }} />
-            <Text style={styles.infoRowText}>{poi.cuisine}</Text>
+            <Ionicons name="restaurant-outline" size={16} color={colors.textDark} style={styles.infoRowIonicon} />
+            <Text style={styles.infoRowText}>{cuisine}</Text>
           </View>
         ) : null}
       </View>
 
-      {poi.route ? (
-        <TouchableOpacity style={styles.button} onPress={visRute}>
-          <Text style={styles.buttonText}>🧭 Vis rute</Text>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={() => navigation.navigate('Route', { destination: poi })}
+      >
+        <Text style={styles.buttonText}>🧭 Route here</Text>
+      </TouchableOpacity>
+      {onMap ? (
+        <TouchableOpacity style={styles.buttonOutline} onPress={showOnMap}>
+          <Text style={styles.buttonOutlineText}>🗺️ Show on map</Text>
         </TouchableOpacity>
       ) : null}
-      {poi.phone ? (
-        <TouchableOpacity style={styles.button} onPress={ring}>
-          <Text style={styles.buttonText}>📞 Ring ({poi.phone})</Text>
+      {phone ? (
+        <TouchableOpacity
+          style={styles.buttonOutline}
+          onPress={() => openLink(phone, 'This device cannot make phone calls.')}
+        >
+          <Text style={styles.buttonOutlineText}>📞 Call {poi.phone}</Text>
         </TouchableOpacity>
       ) : null}
-      {poi.website ? (
-        <TouchableOpacity style={styles.button} onPress={besøgHjemmeside}>
-          <Text style={styles.buttonText}>🌐 Besøg hjemmeside</Text>
+      {website ? (
+        <TouchableOpacity style={styles.buttonOutline} onPress={() => openLink(website)}>
+          <Text style={styles.buttonOutlineText}>🌐 Visit website</Text>
         </TouchableOpacity>
       ) : null}
-    </View>
+    </ScrollView>
   );
 }

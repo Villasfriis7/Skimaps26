@@ -1,12 +1,8 @@
-// Offentlige toiletter i Verbier-omraadet.
-// Hentet fra rigtige OpenStreetMap-data (amenity=toilets) omkring skiomraadet.
+// Offentlige toiletter i Verbier-området.
+// Hentet fra rigtige OpenStreetMap-data (amenity=toilets), afgrænset til dem,
+// der ligger højst 1 km fra en lift eller pist i data/verbierMap.js.
 export const toilets = [
-  { id: 'wc-1', latitude: 46.02799, longitude: 7.14376 },
-  { id: 'wc-2', latitude: 46.06479, longitude: 7.14688 },
-  { id: 'wc-3', latitude: 46.07855, longitude: 7.15077 },
-  { id: 'wc-4', latitude: 46.10639, longitude: 7.14729 },
   { id: 'wc-5', latitude: 46.06032, longitude: 7.19606 },
-  { id: 'wc-6', latitude: 46.14516, longitude: 7.18014 },
   { id: 'wc-7', latitude: 46.09931, longitude: 7.21735 },
   { id: 'wc-8', latitude: 46.09559, longitude: 7.22721 },
   { id: 'wc-9', latitude: 46.12208, longitude: 7.21885 },
@@ -19,12 +15,6 @@ export const toilets = [
   { id: 'wc-16', latitude: 46.08498, longitude: 7.30194 },
   { id: 'wc-17', latitude: 46.11335, longitude: 7.30409 },
   { id: 'wc-18', latitude: 46.13537, longitude: 7.31592 },
-  { id: 'wc-19', latitude: 46.01813, longitude: 7.33107 },
-  { id: 'wc-20', latitude: 46.00231, longitude: 7.34235 },
-  { id: 'wc-21', latitude: 46.02127, longitude: 7.328 },
-  { id: 'wc-22', latitude: 46.00627, longitude: 7.34232 },
-  { id: 'wc-23', latitude: 46.03085, longitude: 7.14571 },
-  { id: 'wc-24', latitude: 46.04601, longitude: 7.15827 },
   { id: 'wc-25', latitude: 46.05841, longitude: 7.19359 },
   { id: 'wc-26', latitude: 46.08046, longitude: 7.20812 },
   { id: 'wc-27', latitude: 46.07862, longitude: 7.21471 },

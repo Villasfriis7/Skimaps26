@@ -1,16 +1,22 @@
-// Kuraterede cafeer og restauranter i Verbier skiområdet, med håndskrevne
-// gåtids-/rutebeskrivelser. Bruges af MapScreen (markører), ExploreScreen
-// (Featured) og POIDetailScreen. Koordinater og kontaktinfo er verificeret
-// mod rigtige OpenStreetMap-data (se data/places.js for den bredere,
-// ikke-kuraterede liste af 363 rigtige steder i området).
+// Kuraterede ("featured") steder i Verbier skiområdet med en håndskrevet
+// beskrivelse. Bruges af ExploreScreen (Featured), MapScreen (store nåle) og
+// POIDetailScreen.
+//
+// Koordinater og kontaktinfo er slået op i OpenStreetMap (november 2026).
+// Afstand til nærmeste lift og selve ruten er IKKE skrevet i hånden længere -
+// de beregnes ud fra liftdataene (utils/places.js og utils/routing.js), så de
+// ikke kan komme til at modsige kortet.
+//
+// `replaces` er id'et på det samme sted i data/places.js, så stedet ikke
+// vises to gange på kortet eller i søgningen.
 export const pois = [
   {
     id: '1',
     name: 'Le Rouge',
-    type: 'restaurant',
-    description: 'Populær restaurant og bar lige ved Médran-liftens bundstation i Verbier by. Solterrasse og livlig stemning efter skidagen.',
-    walkTime: '2 min fra Médran-liften',
-    route: 'Stå af Médran-gondolen ved bundstationen i Verbier by, gå til venstre langs pladsen - Le Rouge ligger 2 min derfra.',
+    category: 'restaurant',
+    featured: true,
+    description:
+      'Popular restaurant and bar with a sun terrace and a lively atmosphere once the ski day is over.',
     latitude: 46.10055,
     longitude: 7.23033,
     phone: '+41 27 771 80 00',
@@ -20,51 +26,53 @@ export const pois = [
   {
     id: '2',
     name: 'Chez Dany',
-    type: 'restaurant',
-    description: 'Klassisk bjergrestaurant i skoven ved Savoleyres, kendt for hjemmelavet mad og hyggelig atmosfære langt fra pisterne.',
-    walkTime: '10 min fra Savoleyres-liften',
-    route: 'Fra toppen af Savoleyres-gondolen, følg stien mod Clambin/skoven i ca. 10 min - Chez Dany ligger midt i skoven.',
+    category: 'restaurant',
+    featured: true,
+    description:
+      'Classic mountain restaurant in the forest hamlet of Clambin, known for home-style food and a cosy atmosphere.',
     latitude: 46.08674,
     longitude: 7.23637,
-    phone: '+41 27 7712524',
+    address: 'Hameau de Clambin',
+    phone: '+41 27 771 25 24',
     website: 'https://www.chezdany.ch/',
     openingHours: 'Mo-Su 12:00-22:00',
   },
   {
     id: '3',
     name: 'Le Carrefour',
-    type: 'cafe',
-    description: 'Selvbetjeningscafé ved Attelas med udsigt over dalen. Godt stop for kaffe og en let frokost midt i pisterne.',
-    walkTime: '3 min fra Attelas-liften',
-    route: 'Stå af Attelas-stolelften ved topstationen og gå ligeud - Le Carrefour ligger lige ved siden af liften.',
-    latitude: 46.09820,
-    longitude: 7.27180,
+    category: 'restaurant',
+    featured: true,
+    replaces: 'rest-54',
+    description: 'Restaurant on the hillside just above Verbier village.',
+    latitude: 46.10196,
+    longitude: 7.24198,
     phone: null,
     website: null,
     openingHours: null,
   },
   {
     id: '4',
-    name: 'Cabane du Mont-Fort',
-    type: 'restaurant',
-    description: 'Ikonisk bjerghytte højt til fjelds nær Mont-Fort, med panoramaudsigt til Mont Blanc og Matterhorn. Populært stop for de øvede skiløbere.',
-    walkTime: '15 min fra Lac des Vaux-liften',
-    route: 'Fra toppen af Lac des Vaux-stolelften, følg skiltene mod "Cabane du Mont-Fort" til fods i ca. 15 min opad.',
-    latitude: 46.10150,
-    longitude: 7.27400,
-    phone: null,
-    website: null,
+    name: 'Cabane Mont Fort',
+    category: 'restaurant',
+    featured: true,
+    description:
+      'Mountain hut at 2,457 m above La Chaux with panoramic views. A popular stop for confident skiers.',
+    latitude: 46.08356,
+    longitude: 7.28105,
+    phone: '+41 77 269 45 27',
+    website: 'https://cabanemontfort.com',
     openingHours: null,
   },
   {
     id: '5',
-    name: 'La Chaux',
-    type: 'cafe',
-    description: 'Solrig selvbetjeningsrestaurant i La Chaux-området, med stor terrasse og udsigt over Verbier-dalen.',
-    walkTime: '5 min fra Savoleyres-liften',
-    route: 'Fra toppen af Savoleyres-gondolen kør ned mod La Chaux - restauranten ligger ved siden af den røde Attelas-pist.',
-    latitude: 46.11900,
-    longitude: 7.22100,
+    name: 'Le Dahu',
+    category: 'restaurant',
+    featured: true,
+    replaces: 'rest-59',
+    description: 'Sunny restaurant with a large terrace in the La Chaux area, right by the lifts.',
+    latitude: 46.08043,
+    longitude: 7.26834,
+    cuisine: 'regional',
     phone: null,
     website: null,
     openingHours: null,

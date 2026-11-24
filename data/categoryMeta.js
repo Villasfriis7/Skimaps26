@@ -1,7 +1,8 @@
 import { colors } from '../styles/styles';
 
-// Fælles udseende (ikon/farve/label) pr. stedkategori - bruges af MapScreen
-// (filter-chips og markører) og POIDetailScreen, så de altid er i sync.
+// Fælles udseende (ikon/farve/label) pr. stedkategori - bruges af kortet
+// (filter-chips og markører), søgningen, detaljesiden og gemte steder, så de
+// altid er i sync.
 export const categoryMeta = {
   restaurant: { emoji: '🍽️', icon: 'restaurant-outline', label: 'Restaurants', bg: '#fbe0d7', color: colors.restaurant },
   cafe: { emoji: '☕', icon: 'cafe-outline', label: 'Cafés', bg: '#fdeed7', color: colors.cafe },

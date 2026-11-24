@@ -13,7 +13,10 @@ import ProfileScreen from './screens/ProfileScreen';
 import POIDetailScreen from './screens/POIDetailScreen';
 import WeatherDetailScreen from './screens/WeatherDetailScreen';
 import SavedPlacesScreen from './screens/SavedPlacesScreen';
+import RouteScreen from './screens/RouteScreen';
 import { SavedPlacesProvider } from './context/SavedPlacesContext';
+import { LocationProvider } from './context/LocationContext';
+import { RouteProvider } from './context/RouteContext';
 import { colors } from './styles/styles';
 
 const Tab = createBottomTabNavigator();
@@ -30,6 +33,9 @@ const tabIcons = {
 
 // Den faste bund-navigation med de 5 hovedsektioner. Hver fane styrer selv sin
 // egen header-UI (se screens/*), så den native header er slået fra her.
+// Fanebjælkens højde og bund-afstand sættes IKKE i hånden: React Navigation
+// lægger selv plads til under ikonerne til iPhones home-indikator og Androids
+// navigationsbjælke, og en fast højde ville fjerne den plads igen.
 function MainTabs() {
   return (
     <Tab.Navigator
@@ -37,11 +43,6 @@ function MainTabs() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: '#9fb4bf',
-        tabBarStyle: {
-          height: 64,
-          paddingBottom: 10,
-          paddingTop: 8,
-        },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
@@ -61,39 +62,51 @@ function MainTabs() {
   );
 }
 
-// Rod-stack: bund-navigationen plus POIDetail, som kan åbnes ovenpå enhver
-// fane (fx fra Explore eller Map) og skjuler automatisk fanebjælken.
+// Rod-stack: bund-navigationen plus detaljesiderne, som kan åbnes ovenpå
+// enhver fane (fx fra Explore eller Map) og automatisk skjuler fanebjælken.
+// Statusbaren er mørk på fanerne (lys baggrund); detaljesiderne har mørkeblå
+// header og sætter derfor selv <StatusBar style="light" />.
 export default function App() {
   return (
     <SafeAreaProvider>
       <SavedPlacesProvider>
-        <NavigationContainer>
-          <StatusBar style="dark" />
-          <RootStack.Navigator
-            screenOptions={{
-              headerStyle: { backgroundColor: colors.primary },
-              headerTintColor: '#fff',
-              headerTitleStyle: { fontWeight: '700' },
-            }}
-          >
-            <RootStack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
-            <RootStack.Screen
-              name="POIDetail"
-              component={POIDetailScreen}
-              options={({ route }) => ({ title: route.params.poi.name })}
-            />
-            <RootStack.Screen
-              name="WeatherDetail"
-              component={WeatherDetailScreen}
-              options={{ title: 'Vejr i Verbier' }}
-            />
-            <RootStack.Screen
-              name="SavedPlaces"
-              component={SavedPlacesScreen}
-              options={{ title: 'Saved places' }}
-            />
-          </RootStack.Navigator>
-        </NavigationContainer>
+        <LocationProvider>
+          <RouteProvider>
+            <NavigationContainer>
+              <StatusBar style="dark" />
+              <RootStack.Navigator
+                screenOptions={{
+                  headerStyle: { backgroundColor: colors.primary },
+                  headerTintColor: '#fff',
+                  headerTitleStyle: { fontWeight: '700' },
+                  headerBackButtonDisplayMode: 'minimal',
+                }}
+              >
+                <RootStack.Screen
+                  name="MainTabs"
+                  component={MainTabs}
+                  options={{ headerShown: false }}
+                />
+                <RootStack.Screen
+                  name="POIDetail"
+                  component={POIDetailScreen}
+                  options={({ route }) => ({ title: route.params.poi.name })}
+                />
+                <RootStack.Screen
+                  name="WeatherDetail"
+                  component={WeatherDetailScreen}
+                  options={{ title: 'Weather in Verbier' }}
+                />
+                <RootStack.Screen
+                  name="SavedPlaces"
+                  component={SavedPlacesScreen}
+                  options={{ title: 'Saved places' }}
+                />
+                <RootStack.Screen name="Route" component={RouteScreen} options={{ title: 'Route' }} />
+              </RootStack.Navigator>
+            </NavigationContainer>
+          </RouteProvider>
+        </LocationProvider>
       </SavedPlacesProvider>
     </SafeAreaProvider>
   );

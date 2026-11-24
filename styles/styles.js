@@ -12,6 +12,10 @@ export const colors = {
   textMuted: '#5a7d8c',
   cafe: '#e8a33d',
   restaurant: '#e5673f',
+  route: '#d81b60', // aktiv rute på kortet - må ikke ligne en pistfarve
+  sled: '#8e44ad', // kælkebane
+  open: '#1e8e5a',
+  closed: '#c0392b',
 };
 
 const cardShadow = {
@@ -34,96 +38,27 @@ export const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: colors.ice,
   },
-
-  // --- Home screen ---
-  homeGradient: {
-    flex: 1,
+  // Luft i bunden af scrollbare detaljesider (container har allerede padding 20).
+  scrollContent: {
+    paddingBottom: 40,
   },
-  homeContent: {
-    flex: 1,
-    padding: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
+  mutedText: {
+    fontSize: 14,
+    color: colors.textMuted,
   },
-  logoCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-  },
-  logoEmoji: {
-    fontSize: 46,
-  },
-  brandTitle: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: colors.white,
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  brandTagline: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-    textAlign: 'center',
+  footnote: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textMuted,
     marginTop: 8,
-    marginBottom: 42,
   },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.white,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    marginVertical: 8,
-    width: '100%',
-    ...cardShadow,
-  },
-  primaryButtonIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  primaryButtonText: {
-    color: colors.primary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.55)',
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 16,
-    marginVertical: 8,
-    width: '100%',
-  },
-  secondaryButtonIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  secondaryButtonText: {
-    color: colors.white,
-    fontSize: 16,
-    fontWeight: '700',
+  footnoteLink: {
+    textDecorationLine: 'underline',
   },
 
-  // --- Generic titles/buttons (still used where needed) ---
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: colors.primary,
-    marginBottom: 30,
-    textAlign: 'center',
-  },
+  // --- Generic titles/buttons ---
   subtitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -145,8 +80,25 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  // Sekundær knap (hvid med kant) - så den vigtigste handling skiller sig ud.
+  buttonOutline: {
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingVertical: 13,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    marginVertical: 6,
+    width: '100%',
+    alignItems: 'center',
+  },
+  buttonOutlineText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
 
-  // --- Map screen ---
+  // --- Screen header + map screen ---
   screenHeader: {
     marginBottom: 14,
   },
@@ -159,24 +111,6 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     marginTop: 2,
-  },
-  mapPlaceholder: {
-    flex: 1,
-    backgroundColor: '#cfe8f5',
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    padding: 20,
-  },
-  mapPlaceholderText: {
-    fontSize: 16,
-    color: colors.primary,
-    textAlign: 'center',
-    marginVertical: 4,
   },
   mapContainer: {
     flex: 1,
@@ -196,6 +130,114 @@ export const styles = StyleSheet.create({
     textShadowColor: '#fff',
     textShadowRadius: 3,
     textShadowOffset: { width: 0, height: 0 },
+  },
+  placeDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeDotEmoji: {
+    fontSize: 10,
+  },
+  toiletMarker: {
+    fontSize: 20,
+  },
+  friendMarker: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2.5,
+    borderColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendMarkerText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  focusRing: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 3,
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(63,167,214,0.18)',
+  },
+  locateButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...cardShadow,
+  },
+  mapAttribution: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    fontSize: 10,
+    color: colors.textMuted,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 6,
+    overflow: 'hidden',
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+  },
+  // Info-kort oven på kortets nederste kant (valgt lift/pist/sted, aktiv rute).
+  mapCards: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    bottom: 10,
+  },
+  mapCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginTop: 8,
+    ...cardShadow,
+  },
+  mapCardRoute: {
+    borderLeftWidth: 4,
+    borderLeftColor: colors.route,
+  },
+  mapCardText: {
+    flex: 1,
+    marginRight: 10,
+  },
+  mapCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textDark,
+  },
+  mapCardSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  mapCardButton: {
+    backgroundColor: colors.ice,
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    marginRight: 10,
+  },
+  mapCardButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
   },
   calloutContainer: {
     minWidth: 160,
@@ -234,12 +276,6 @@ export const styles = StyleSheet.create({
     width: 14,
     height: 4,
     borderRadius: 2,
-    marginRight: 5,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
     marginRight: 5,
   },
   legendText: {
@@ -328,12 +364,20 @@ export const styles = StyleSheet.create({
   },
   infoRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 8,
   },
-  infoRowIcon: {
-    fontSize: 16,
+  infoRowIonicon: {
     marginRight: 8,
+    marginTop: 2,
+  },
+  openNow: {
+    color: colors.open,
+    fontWeight: '700',
+  },
+  closedNow: {
+    color: colors.closed,
+    fontWeight: '700',
   },
   infoRowText: {
     fontSize: 15,
@@ -353,6 +397,115 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+
+  // --- Route screen ---
+  routeFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  routeChoiceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 8,
+  },
+  routeDestination: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textDark,
+  },
+  routePicker: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#eef3f6',
+    paddingTop: 12,
+  },
+  routePickerInput: {
+    backgroundColor: colors.ice,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    fontSize: 15,
+    color: colors.textDark,
+    marginBottom: 6,
+  },
+  routePickerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef3f6',
+  },
+  routePickerName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.textDark,
+    flexShrink: 1,
+  },
+  routePickerType: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginLeft: 10,
+  },
+  skillDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 1.5,
+  },
+  routeSummary: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 12,
+  },
+  routeSummaryTime: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.primary,
+    marginRight: 10,
+  },
+  routeSummaryMeta: {
+    fontSize: 14,
+    color: colors.textMuted,
+  },
+  routeStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 8,
+    ...cardShadow,
+  },
+  routeStepNumber: {
+    width: 20,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textMuted,
+  },
+  routeStepTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textDark,
+  },
+  routeStepTime: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+    marginLeft: 8,
+  },
+
+  // --- Weather detail ---
+  forecastTemps: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textDark,
   },
 
   // --- Explore screen ---
@@ -423,10 +576,12 @@ export const styles = StyleSheet.create({
     marginBottom: 20,
     ...cardShadow,
   },
-  searchBarText: {
-    fontSize: 15,
-    color: colors.textMuted,
+  searchInput: {
+    flex: 1,
     marginLeft: 8,
+    fontSize: 15,
+    color: colors.textDark,
+    padding: 0,
   },
   quickActionsRow: {
     flexDirection: 'row',
@@ -541,13 +696,17 @@ export const styles = StyleSheet.create({
     marginBottom: 10,
     ...cardShadow,
   },
+  // Indpakningen har afstanden til teksten, så online-prikken (absolut
+  // placeret i hjørnet) sidder på selve avataren og ikke ude i mellemrummet.
+  avatarWrap: {
+    marginRight: 12,
+  },
   avatarCircle: {
     width: 46,
     height: 46,
     borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
   },
   avatarText: {
     color: colors.white,
@@ -599,6 +758,9 @@ export const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 20,
     ...cardShadow,
+  },
+  shareLocationButtonActive: {
+    backgroundColor: colors.open,
   },
   shareLocationText: {
     color: colors.white,
@@ -683,10 +845,20 @@ export const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  partnerCardDescription: {
+    fontSize: 13,
+    color: colors.textDark,
+    marginTop: 6,
+    lineHeight: 18,
+  },
   partnerCardDistance: {
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 6,
+  },
+  partnerCardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
   },
   showCodeButton: {
     alignSelf: 'flex-start',
@@ -695,6 +867,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 7,
     paddingHorizontal: 14,
     marginTop: 10,
+    marginRight: 8,
   },
   showCodeButtonText: {
     fontSize: 13,
