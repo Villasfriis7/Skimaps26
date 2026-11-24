@@ -20,6 +20,7 @@ import {
   formatDuration,
   regionForCoordinates,
 } from '../utils/geo';
+import { openLink } from '../utils/links';
 import { styles, colors } from '../styles/styles';
 
 // Filter-chips øverst på kortet. "toilets" og "friends" er ikke
@@ -58,27 +59,31 @@ const legendItems = [
   { label: 'Sled run', color: colors.sled },
 ];
 
-// BAGGRUNDSKORT - skal virke i hele verden, ikke kun i Verbier.
+// BAGGRUNDSKORT - et snedækket landskab i hele verden, ikke kun i Verbier.
 //
-// Bunden er altid telefonens eget kort (Apple Maps på iOS, Google Maps på
-// Android). Det dækker hele kloden, koster ikke noget, kræver ingen ekstern
-// server og gemmes af telefonen selv. To visninger, som lag-knappen skifter
-// imellem:
-//   terrain:   terrænkort med skygger, veje og stednavne i dæmpede farver,
-//              så pisterne står tydeligt.
-//   satellite: satellitfoto med stednavne.
+// Lagene i terrænvisningen, nederst først:
+//   1. Telefonens eget kort (Apple Maps / Google Maps). Det ses kun, hvis
+//      lagene ovenpå ikke kan hentes - så er der aldrig en tom flade - og det
+//      leverer stednavnene, som Apple tegner oven på alt andet.
+//   2. snowTerrain: EOX' "Terrain Light" - hvidt terræn med gråt relief,
+//      højdekurver, veje og søer. Dækker hele kloden, zoom 0-18, uden
+//      API-nøgle. EOX tillader brug i egne apps mod kildeangivelse og et link
+//      til maps.eox.at (se showMapSources). Deres server er "best effort" og
+//      kan begrænse trafikken ved høj belastning.
+//   3. swissRelief: swisstopos terrænskygge - skarpere relief, men kun i
+//      Schweiz. Uden for Schweiz er fliserne gennemsigtige, så lag 2 ses.
+//   4. swissTopo: swisstopos vinter-landkort, svagt ovenpå fra zoom 14, så
+//      gader og stednavne anes (kun Schweiz). Kræver teksten "©swisstopo".
 //
-// Oven på terrænkortet lægges swisstopos åbne kortfliser, HVOR DE FINDES
-// (Schweiz og Liechtenstein). Uden for Schweiz svarer swisstopo med tomme,
-// gennemsigtige fliser, så dér ser man bare telefonens kort. swisstopo er
-// gratis og uden API-nøgle, men kildeangivelsen "©swisstopo" er et krav.
-//   swissRelief: lys terrænskygge - bjergene som snedækket relief.
-//   swissTopo:   vinter-landkortet, lagt svagt ovenpå fra zoom 14, så gader,
-//                højdekurver og stednavne anes.
+// Lag-knappen skifter til satellit: telefonens satellitfoto uden lagene ovenpå.
 const nativeMapType = {
   terrain: Platform.OS === 'android' ? 'terrain' : 'mutedStandard',
   satellite: 'hybrid',
 };
+
+const EOX = 'https://tiles.maps.eox.at/wmts/1.0.0';
+const snowTerrain = `${EOX}/terrain-light_3857/default/g/{z}/{y}/{x}.jpg`;
+const SNOW_MAX_ZOOM = 18;
 
 const SWISSTOPO = 'https://wmts.geo.admin.ch/1.0.0';
 const swissRelief = `${SWISSTOPO}/ch.swisstopo.leichte-basiskarte_reliefschattierung/default/current/3857/{z}/{x}/{y}.png`;
@@ -257,6 +262,22 @@ export default function MapScreen({ navigation, route }) {
     // Kun focusKey skal udløse genvejen - ikke hver gang ruten/kortet ændrer sig.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
+
+  // Kildeangivelse med links. EOX beder om et link tilbage til maps.eox.at,
+  // og OpenStreetMap/swisstopo kræver, at kilden kan ses. (Android viser højst
+  // tre knapper i en Alert - derfor præcis tre.)
+  const showMapSources = () =>
+    Alert.alert(
+      'Map sources',
+      'Lifts, pistes and places: © OpenStreetMap contributors, via OpenSkiMap.\n\n' +
+        'Snow terrain: Terrain Light { Data © OpenStreetMap contributors and others, Rendering © EOX }.\n\n' +
+        'Switzerland: Federal Office of Topography ©swisstopo.',
+      [
+        { text: 'OpenStreetMap', onPress: () => openLink('https://www.openstreetmap.org/copyright') },
+        { text: 'EOX Maps', onPress: () => openLink('https://maps.eox.at') },
+        { text: 'Close', style: 'cancel' },
+      ]
+    );
 
   const goToMyLocation = async () => {
     const point = await requestLocation();
@@ -443,6 +464,14 @@ export default function MapScreen({ navigation, route }) {
               det samme på Android; på iOS er det rækkefølgen, der tæller.
               (Et hvidt "snelag" oven på telefonens kort er prøvet og droppet:
               det gjorde terrænet for blegt og lagde sig over swisstopo.) */}
+          {baseMap === 'terrain' && (
+            <UrlTile
+              urlTemplate={snowTerrain}
+              maximumZ={SNOW_MAX_ZOOM}
+              tileSize={256}
+              zIndex={-3}
+            />
+          )}
           {baseMap === 'terrain' && (
             <UrlTile urlTemplate={swissRelief} maximumZ={MAX_TILE_ZOOM} tileSize={256} zIndex={-2} />
           )}
@@ -735,11 +764,14 @@ export default function MapScreen({ navigation, route }) {
         </View>
       </View>
 
-      {/* Kildeangivelse er et krav fra både OpenStreetMap (ODbL) og swisstopo.
-          Den står under kortet, så info-kort og knapper aldrig dækker den. */}
-      <Text style={styles.mapAttribution}>
-        Map data © OpenStreetMap contributors · OpenSkiMap · ©swisstopo
-      </Text>
+      {/* Kildeangivelse er et krav fra OpenStreetMap (ODbL), EOX og swisstopo.
+          Den står under kortet, så info-kort og knapper aldrig dækker den;
+          et tryk viser de fulde tekster og links. */}
+      <TouchableOpacity onPress={showMapSources} accessibilityLabel="Show map sources">
+        <Text style={styles.mapAttribution}>
+          © OpenStreetMap contributors · OpenSkiMap · Terrain © EOX · ©swisstopo
+        </Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }

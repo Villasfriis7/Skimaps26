@@ -14,9 +14,10 @@ og denne README er på dansk.
 - **Map** - interaktivt kort over Verbier med ægte geodata fra OpenStreetMap/OpenSkiMap:
   47 lifter, 275 pist-stykker (farvet efter rigtig sværhedsgrad), 322 steder
   (restauranter/caféer/après-ski/hoteller/ski rental) og 20 offentlige toiletter.
-  Baggrunden er telefonens eget terrænkort (Apple Maps/Google Maps), så der er et rigtigt
-  kort overalt i verden; en knap skifter til satellit. I Schweiz lægges swisstopos kort
-  ovenpå: bjergene som snedækket relief og, når man zoomer ind, gader, højdekurver og stednavne.
+  Baggrunden er et snedækket terrænkort i hele verden (hvidt relief med højdekurver og veje
+  fra EOX), med telefonens eget kort nedenunder som reserve og til stednavne; en knap skifter
+  til satellit. I Schweiz lægges swisstopos kort ovenpå: skarpere relief og, når man zoomer
+  ind, gader, højdekurver og stednavne.
   Stregtykkelse og detaljer følger zoom: på afstand er steder små prikker, tæt på får de
   ikoner, og lifterne får stationer og navne. Filtrérbart via kategori-chips. Tryk på en lift
   eller pist for navn, type, længde og højdeforskel. "Min position"-knappen beder om
@@ -63,13 +64,16 @@ Mock-data (opdigtet eksempeldata): venner, partner-rabatter og brugerprofilen.
 
 - Kort- og stedsdata © [OpenStreetMap](https://www.openstreetmap.org/copyright)-bidragydere
   (ODbL), lift- og pistedata via [OpenSkiMap](https://openskimap.org).
-- Baggrundskort: Apple Maps på iOS og Google Maps på Android (krediteres af kortet selv).
-  I Schweiz desuden terrænskygge og vinter-landkort fra Federal Office of Topography
+- Baggrundskort i hele verden: [EOX::Maps](https://maps.eox.at) "Terrain Light"
+  { Data © OpenStreetMap contributors and others, Rendering © EOX }. Gratis og uden
+  API-nøgle; EOX beder om kildeangivelse og et link tilbage, og serveren er "best effort".
+- Baggrundskort i Schweiz: terrænskygge og vinter-landkort fra Federal Office of Topography
   [©swisstopo](https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices):
   gratis og uden API-nøgle, men med en fair use-grænse.
+- Nederst ligger Apple Maps (iOS) eller Google Maps (Android), som krediteres af kortet selv.
 - Vejr- og højdedata fra [Open-Meteo](https://open-meteo.com) (CC BY 4.0).
 
-Alle tre krediteres også inde i appen (under kortet og på vejrsiden).
+Alle krediteres også inde i appen (under kortet, med links ved tryk, og på vejrsiden).
 
 ## Tech stack
 
