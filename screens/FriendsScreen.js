@@ -66,12 +66,11 @@ export default function FriendsScreen({ navigation }) {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.tabScreen} edges={['top']}>
       <View style={styles.screenHeader}>
         <Text style={styles.screenHeaderTitle}>Friends</Text>
         <Text style={styles.screenHeaderSubtitle}>
-          {friends.filter((f) => f.online).length} of {friends.length} friends online · tap a friend
-          to see them on the map
+          {friends.filter((f) => f.online).length} of {friends.length} online · tap a friend to see them on the map
         </Text>
       </View>
 
@@ -95,9 +94,12 @@ export default function FriendsScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderFriend}
         showsVerticalScrollIndicator={false}
+        style={styles.listBleed}
+        contentContainerStyle={styles.listBleedContent}
         ListFooterComponent={
           <TouchableOpacity style={styles.button} onPress={createGroupRoute}>
-            <Text style={styles.buttonText}>👥 Create group route</Text>
+            <Ionicons name="people" size={18} color={colors.white} style={styles.buttonIcon} />
+            <Text style={styles.buttonText}>Create group route</Text>
           </TouchableOpacity>
         }
       />

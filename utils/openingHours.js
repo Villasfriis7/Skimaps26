@@ -110,3 +110,25 @@ export function isOpenNow(text, now = new Date()) {
   );
   return openToday || openSinceYesterday;
 }
+
+const DAY_NAMES = { Mo: 'Mon', Tu: 'Tue', We: 'Wed', Th: 'Thu', Fr: 'Fri', Sa: 'Sat', Su: 'Sun' };
+
+// Gør OSM's rå tekst pænere at læse, uden at ændre indholdet: én regel pr.
+// linje, hele dagsnavne-forkortelser og tankestreg i intervaller.
+//   "Mo-Th 07:00-23:00; Su 07:00-16:00" -> ["Mon–Thu 07:00–23:00", "Sun 07:00–16:00"]
+export function formatOpeningHours(text) {
+  if (!text) return [];
+  return text
+    .split(';')
+    .map((rule) => rule.trim())
+    .filter(Boolean)
+    .map((rule) =>
+      rule
+        .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su)\b/g, (day) => DAY_NAMES[day])
+        .replace(/\bPH\b/g, 'public holidays')
+        .replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)-(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/g, '$1–$2')
+        .replace(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/g, '$1–$2')
+        .replace(/,(?=\S)/g, ', ')
+        .replace(/^week /, 'Week ')
+    );
+}

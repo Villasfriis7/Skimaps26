@@ -59,16 +59,27 @@ export default function ExploreScreen({ navigation }) {
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return null;
+    // Rangér træfferne, så det, brugeren mest sandsynligt mener, står øverst:
+    // navn der starter med søgningen > et ord i navnet der starter med den >
+    // navn der indeholder den > kun nævnt i beskrivelsen.
+    const rank = (p) => {
+      const name = p.name.toLowerCase();
+      if (name.startsWith(q)) return 0;
+      if (name.split(/[\s\-|,]+/).some((word) => word.startsWith(q))) return 1;
+      if (name.includes(q)) return 2;
+      if ((p.description || '').toLowerCase().includes(q)) return 3;
+      return -1;
+    };
     const placeMatches = allPlaces
-      .filter(
-        (p) => p.name.toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q)
-      )
+      .map((p) => ({ place: p, rank: rank(p) }))
+      .filter((match) => match.rank !== -1)
+      .sort((a, b) => a.rank - b.rank || a.place.name.localeCompare(b.place.name))
       .slice(0, MAX_PLACE_RESULTS)
-      .map((p) => ({
+      .map(({ place: p }) => ({
         kind: 'place',
         id: p.id,
         title: p.name,
-        subtitle: `${categoryMeta[placeCategory(p)]?.label} · ${nearLiftText(p)}`,
+        subtitle: `${categoryMeta[placeCategory(p)]?.singular} · ${nearLiftText(p)}`,
         data: p,
       }));
     const liftMatches = lifts
@@ -114,6 +125,8 @@ export default function ExploreScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
+        {/* Mens man søger, skjules vejr-kortet, så resultaterne får pladsen. */}
+        {!searchResults && (
         <TouchableOpacity
           style={styles.heroCard}
           disabled={!weather && !weatherError}
@@ -142,6 +155,7 @@ export default function ExploreScreen({ navigation }) {
             </View>
           )}
         </TouchableOpacity>
+        )}
 
         <View style={styles.searchBar}>
           <Ionicons name="search-outline" size={18} color={colors.textMuted} />
@@ -243,7 +257,7 @@ export default function ExploreScreen({ navigation }) {
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.horizontalScroll}
-              contentContainerStyle={{ alignItems: 'flex-start' }}
+              contentContainerStyle={styles.horizontalScrollContent}
             >
               {pois.map((poi) => {
                 const meta = categoryMeta[poi.category];
@@ -254,7 +268,7 @@ export default function ExploreScreen({ navigation }) {
                     onPress={() => navigation.navigate('POIDetail', { poi })}
                   >
                     <View style={[styles.featuredCardImage, { backgroundColor: meta.bg }]}>
-                      <Text style={styles.featuredCardEmoji}>{meta.emoji}</Text>
+                      <Text style={styles.featuredCardEmoji}>{poi.emoji || meta.emoji}</Text>
                     </View>
                     <Text style={styles.featuredCardTitle} numberOfLines={1}>
                       {poi.name}
@@ -277,7 +291,7 @@ export default function ExploreScreen({ navigation }) {
               horizontal
               showsHorizontalScrollIndicator={false}
               style={styles.horizontalScroll}
-              contentContainerStyle={{ alignItems: 'flex-start' }}
+              contentContainerStyle={styles.horizontalScrollContent}
             >
               {partners.map((p) => (
                 <TouchableOpacity

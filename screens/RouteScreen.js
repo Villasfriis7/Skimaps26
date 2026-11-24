@@ -39,7 +39,7 @@ function describeStep(step) {
     icon: 'walk',
     color: colors.textMuted,
     title: `Walk ${formatDistance(step.meters)}`,
-    subtitle: 'On foot or skating - approximate distance',
+    subtitle: 'On foot',
   };
 }
 
@@ -259,11 +259,12 @@ export default function RouteScreen({ navigation, route }) {
           })}
 
           <TouchableOpacity style={styles.button} onPress={showOnMap}>
-            <Text style={styles.buttonText}>🗺️ Show on map</Text>
+            <Ionicons name="map-outline" size={18} color={colors.white} style={styles.buttonIcon} />
+            <Text style={styles.buttonText}>Show on map</Text>
           </TouchableOpacity>
 
           <Text style={styles.footnote}>
-            Times are estimates based on typical skiing and lift speeds. SkiMaps does not know
+            Times and walking distances are estimates based on typical speeds. SkiMaps does not know
             whether a lift or piste is open today - check the resort's own status before you go.
           </Text>
         </>

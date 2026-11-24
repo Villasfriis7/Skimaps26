@@ -50,7 +50,10 @@ export default function PartnersScreen({ navigation }) {
           </View>
           <Text style={styles.partnerCardCategory}>{item.categoryLabel}</Text>
           <Text style={styles.partnerCardDescription}>{item.description}</Text>
-          <Text style={styles.partnerCardDistance}>📍 {partnerLocation(item)}</Text>
+          <View style={styles.partnerCardLocationRow}>
+            <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+            <Text style={styles.partnerCardDistance}>{partnerLocation(item)}</Text>
+          </View>
           <View style={styles.partnerCardActions}>
             <TouchableOpacity style={styles.showCodeButton} onPress={() => showCode(item)}>
               <Text style={styles.showCodeButtonText}>Show code</Text>
@@ -70,11 +73,11 @@ export default function PartnersScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.tabScreen} edges={['top']}>
       <View style={styles.screenHeader}>
         <Text style={styles.screenHeaderTitle}>Partners</Text>
         <Text style={styles.screenHeaderSubtitle}>
-          📍 Verbier · demo offers, not real partnerships yet
+          Verbier · demo offers, not real partnerships yet
         </Text>
       </View>
 
@@ -82,7 +85,7 @@ export default function PartnersScreen({ navigation }) {
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.categoryChipsRow}
-        contentContainerStyle={{ alignItems: 'center' }}
+        contentContainerStyle={styles.categoryChipsContent}
       >
         <TouchableOpacity
           style={[styles.categoryChip, activeCategory === 'all' && styles.categoryChipActive]}
@@ -124,6 +127,8 @@ export default function PartnersScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderPartner}
         showsVerticalScrollIndicator={false}
+        style={styles.listBleed}
+        contentContainerStyle={styles.listBleedContent}
       />
     </SafeAreaView>
   );

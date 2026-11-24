@@ -20,10 +20,10 @@ export const colors = {
 
 const cardShadow = {
   shadowColor: '#0d3b5c',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.12,
-  shadowRadius: 10,
-  elevation: 3,
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.07,
+  shadowRadius: 8,
+  elevation: 2,
 };
 
 // Fælles styles for hele appen - genbruges på tværs af alle skærme.
@@ -32,6 +32,25 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.ice,
     padding: 20,
+  },
+  // De fem faner: ingen luft i bunden, så lister og kort går helt ned til
+  // fanebjælken i stedet for at stoppe 20 px før.
+  tabScreen: {
+    flex: 1,
+    backgroundColor: colors.ice,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  // Lodrette lister med kort: listen går helt ud til skærmkanten (negativ
+  // margin), og luften ligger i indholdet i stedet. Ellers skærer listens
+  // kant kortenes skygger af, og det ligner en grå bjælke bag kortene.
+  listBleed: {
+    marginHorizontal: -20,
+  },
+  listBleedContent: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 28,
   },
   centeredContainer: {
     flex: 1,
@@ -72,8 +91,13 @@ export const styles = StyleSheet.create({
     borderRadius: 14,
     marginVertical: 8,
     width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     ...cardShadow,
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   buttonText: {
     color: colors.white,
@@ -90,7 +114,9 @@ export const styles = StyleSheet.create({
     borderRadius: 14,
     marginVertical: 6,
     width: '100%',
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonOutlineText: {
     color: colors.primary,
@@ -163,8 +189,22 @@ export const styles = StyleSheet.create({
   placeDotEmoji: {
     fontSize: 10,
   },
+  // Toilet: samme runde form som de andre markører (emojien var en stor,
+  // firkantet klods ved siden af dem).
   toiletMarker: {
-    fontSize: 20,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toiletMarkerText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: colors.primary,
   },
   friendMarker: {
     width: 30,
@@ -276,14 +316,15 @@ export const styles = StyleSheet.create({
   },
   // Smal, vandret signaturforklaring over kortet (kan scrolles sidelæns).
   legendStrip: {
-    flexGrow: 0,
-    height: 22,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: 4,
     marginBottom: 10,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 12,
   },
   legendSwatch: {
     width: 14,
@@ -292,7 +333,7 @@ export const styles = StyleSheet.create({
     marginRight: 5,
   },
   legendText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textDark,
     fontWeight: '500',
   },
@@ -637,10 +678,18 @@ export const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: '600',
   },
+  // Vandrette lister: går helt ud til skærmkanten og har luft omkring
+  // kortene, så skyggerne ikke bliver skåret af.
   horizontalScroll: {
     flexGrow: 0,
-    height: 170,
-    marginBottom: 24,
+    marginHorizontal: -20,
+    marginBottom: 10,
+  },
+  horizontalScrollContent: {
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 18,
   },
   featuredCard: {
     width: 150,
@@ -666,6 +715,11 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     marginTop: 1,
+  },
+  hoursLine: {
+    fontSize: 15,
+    color: colors.textDark,
+    lineHeight: 21,
   },
   partnerMiniCard: {
     width: 190,
@@ -786,8 +840,13 @@ export const styles = StyleSheet.create({
   categoryChipsRow: {
     flexDirection: 'row',
     flexGrow: 0,
-    height: 44,
-    marginBottom: 12,
+    height: 52,
+    marginHorizontal: -20,
+    marginBottom: 6,
+  },
+  categoryChipsContent: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
   categoryChip: {
     flexDirection: 'row',
@@ -867,11 +926,16 @@ export const styles = StyleSheet.create({
   partnerCardDistance: {
     fontSize: 12,
     color: colors.textMuted,
-    marginTop: 6,
+    marginLeft: 4,
   },
   partnerCardActions: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  partnerCardLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
   },
   showCodeButton: {
     alignSelf: 'flex-start',

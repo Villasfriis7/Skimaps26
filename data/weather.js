@@ -32,6 +32,10 @@ export function snowConditionLabel({ snowDepthCm, snowfallTodayCm, temperature }
   return 'Packed snow';
 }
 
+// Open-Meteo sender fx 0.56 og 4.01 cm - vis højst én decimal, og ingen
+// decimaler fra 10 cm og op.
+export const formatCm = (cm) => (cm >= 10 ? Math.round(cm) : Math.round(cm * 10) / 10);
+
 export async function fetchVerbierWeather() {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${VERBIER_LAT}&longitude=${VERBIER_LON}` +

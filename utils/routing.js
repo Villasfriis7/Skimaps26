@@ -51,6 +51,9 @@ const SNAP_RADIUS_M = 600; // hvor langt fra netværket start/mål må ligge
 // sammen via pister, men man kan gå eller tage skibussen imellem dem.
 const VILLAGE_RADIUS_M = 1500;
 const VILLAGE_MAX_CLIMB_M = 80;
+// Kun stationer nede i byerne. Uden denne grænse foreslog ruten 2 km "gåture"
+// mellem to liftstationer oppe på bjerget, hvor man ikke kan gå i skistøvler.
+const VILLAGE_MAX_ELEVATION_M = 1800;
 
 // Hvilke sværhedsgrader er tilladt for hvert niveau i UI'et.
 export const skillLevels = [
@@ -244,6 +247,7 @@ export function buildGraph({ lifts, pistes, elevations = {} }) {
       const from = stations[a];
       const to = stations[b];
       if (from.index === to.index) continue;
+      if (from.elevation > VILLAGE_MAX_ELEVATION_M || to.elevation > VILLAGE_MAX_ELEVATION_M) continue;
       if (Math.abs(from.elevation - to.elevation) > VILLAGE_MAX_CLIMB_M) continue;
       const meters = distanceMeters(graph.nodes[from.index], graph.nodes[to.index]);
       if (meters <= TRANSFER_RADIUS_M || meters > VILLAGE_RADIUS_M) continue;
@@ -369,8 +373,22 @@ export function findRoute(graph, from, to, { skill = 'intermediate' } = {}) {
     return true;
   });
 
+  // Når en skjult pist-stump lå mellem to gå-stykker, står de nu lige efter
+  // hinanden i listen - slå dem sammen til ét.
+  const listed = [];
+  for (const step of visible) {
+    const last = listed[listed.length - 1];
+    if (last && last.kind === 'walk' && step.kind === 'walk') {
+      last.seconds += step.seconds;
+      last.meters += step.meters;
+      last.coordinates = [...last.coordinates, ...step.coordinates];
+    } else {
+      listed.push({ ...step });
+    }
+  }
+
   return {
-    steps: visible.map((step, index) => ({ ...step, key: `${index}-${step.kind}-${step.id || 'walk'}` })),
+    steps: listed.map((step, index) => ({ ...step, key: `${index}-${step.kind}-${step.id || 'walk'}` })),
     totalSeconds: steps.reduce((sum, step) => sum + step.seconds, 0),
     totalMeters: steps.reduce((sum, step) => sum + step.meters, 0),
     coordinates: steps.flatMap((step) => step.coordinates),

@@ -40,7 +40,7 @@ export default function SavedPlacesScreen({ navigation }) {
         </View>
         <View style={styles.listItemTextWrap}>
           <Text style={styles.listItemTitle}>{item.name}</Text>
-          <Text style={styles.listItemSubtitle}>{meta.label}</Text>
+          <Text style={styles.listItemSubtitle}>{meta.singular}</Text>
         </View>
         <TouchableOpacity
           onPress={() => removeSaved(item.id)}
@@ -66,6 +66,8 @@ export default function SavedPlacesScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         showsVerticalScrollIndicator={false}
+        style={styles.listBleed}
+        contentContainerStyle={styles.listBleedContent}
       />
     </View>
   );

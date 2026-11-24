@@ -12,7 +12,7 @@ og denne README er på dansk.
 - **Explore** - overblik over skiområdet med rigtigt, live vejr (Open-Meteo), søgning på
   tværs af steder og lifter, samt genveje til kort og partnere.
 - **Map** - interaktivt kort over Verbier med ægte geodata fra OpenStreetMap/OpenSkiMap:
-  47 lifter, 275 pist-stykker (farvet efter rigtig sværhedsgrad), 322 steder
+  47 lifter, 144 km pister (275 stykker, farvet efter rigtig sværhedsgrad), 322 steder
   (restauranter/caféer/après-ski/hoteller/ski rental) og 20 offentlige toiletter.
   Baggrunden er et snedækket terrænkort i hele verden (hvidt relief med højdekurver og veje
   fra EOX), med telefonens eget kort nedenunder som reserve og til stednavne; en knap skifter

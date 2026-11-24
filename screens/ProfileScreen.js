@@ -37,8 +37,12 @@ export default function ProfileScreen({ navigation }) {
   const openMenuItem = (item) => Alert.alert(item.label, 'Coming in a later version.');
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.tabScreen} edges={['top']}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={styles.listBleed}
+        contentContainerStyle={styles.listBleedContent}
+      >
         <View style={styles.screenHeader}>
           <Text style={styles.screenHeaderTitle}>Profile</Text>
         </View>

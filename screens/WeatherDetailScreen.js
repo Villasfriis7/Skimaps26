@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { weatherCodeMeta } from '../data/weather';
+import { weatherCodeMeta, formatCm } from '../data/weather';
 import { openLink } from '../utils/links';
 import { styles, colors } from '../styles/styles';
 
@@ -52,7 +52,7 @@ export default function WeatherDetailScreen({ route }) {
           <Text style={styles.statLabel}>Snow depth</Text>
         </View>
         <View style={styles.statTile}>
-          <Text style={styles.statNumber}>{current.snowfallTodayCm} cm</Text>
+          <Text style={styles.statNumber}>{formatCm(current.snowfallTodayCm)} cm</Text>
           <Text style={styles.statLabel}>Snowfall today</Text>
         </View>
         <View style={[styles.statTile, { borderRightWidth: 0 }]}>
@@ -66,7 +66,7 @@ export default function WeatherDetailScreen({ route }) {
       {daily.map((d, i) => {
         const meta = weatherCodeMeta(d.code);
         const details = [meta.label];
-        if (d.snowfallCm > 0) details.push(`❄️ ${d.snowfallCm} cm`);
+        if (d.snowfallCm > 0) details.push(`❄️ ${formatCm(d.snowfallCm)} cm`);
         if (d.precipProbability != null) details.push(`💧 ${d.precipProbability}%`);
         return (
           <View key={d.date} style={styles.listItem}>

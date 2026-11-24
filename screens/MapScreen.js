@@ -43,7 +43,13 @@ const defaultActive = { ...allOff, restaurant: true, cafe: true, toilets: true, 
 
 // Kun rigtige alpine pister tæller med i overskriften - datasættet rummer
 // også skitur-ruter og en kælkebane (se utils/pistes.js).
-const downhillPisteCount = pistes.filter((piste) => pisteKind(piste) === 'downhill').length;
+// Vi viser samlet pistlængde i stedet for et antal: OSM deler hver pist op i
+// mange stykker, så "275 pistes" var antal stykker, ikke antal pister.
+const pisteKm = Math.round(
+  pistes
+    .filter((piste) => pisteKind(piste) === 'downhill' && piste.difficulty !== 'freeride')
+    .reduce((sum, piste) => sum + lineLengthMeters(piste.coordinates), 0) / 1000
+);
 
 const LIFT_COLOR = '#2b3a42';
 const LIFT_COLOR_ON_SATELLITE = '#ffffff'; // mørke lifter forsvinder på et satellitfoto
@@ -101,6 +107,9 @@ function zoomLevelFor(region) {
 }
 const PISTE_WIDTH = { far: 2.5, mid: 3.5, near: 5 };
 const LIFT_WIDTH = { far: 1.5, mid: 2, near: 3 };
+// Liftstationernes ringe har radius i meter. Tæt på skal den være mindre,
+// ellers fylder de som store bolde.
+const STATION_RADIUS = { far: 26, mid: 18, near: 11 };
 
 // Midtpunktet på en linje - her står liftens navn, når man er zoomet ind.
 function midpointOf(coordinates) {
@@ -372,14 +381,14 @@ export default function MapScreen({ navigation, route }) {
         <Circle
           key={station.id}
           center={{ latitude: station.latitude, longitude: station.longitude }}
-          radius={22}
+          radius={STATION_RADIUS[level]}
           fillColor={colors.white}
           strokeColor={LIFT_COLOR}
           strokeWidth={2}
           zIndex={3}
         />
       )),
-    []
+    [level]
   );
 
   // Kuraterede pois.js-steder vises altid som store nåle; OSM-stederne
@@ -396,11 +405,11 @@ export default function MapScreen({ navigation, route }) {
       : null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.tabScreen} edges={['top']}>
       <View style={styles.screenHeader}>
         <Text style={styles.screenHeaderTitle}>Verbier 🇨🇭</Text>
         <Text style={styles.screenHeaderSubtitle}>
-          {lifts.length} lifts · {downhillPisteCount} pistes · {allPlaces.length} places
+          {lifts.length} lifts · {pisteKm} km of pistes · {allPlaces.length} places
         </Text>
       </View>
 
@@ -408,7 +417,7 @@ export default function MapScreen({ navigation, route }) {
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.categoryChipsRow}
-        contentContainerStyle={{ alignItems: 'center' }}
+        contentContainerStyle={styles.categoryChipsContent}
       >
         {filterChips.map((chip) => {
           const on = active[chip.id];
@@ -427,19 +436,14 @@ export default function MapScreen({ navigation, route }) {
         })}
       </ScrollView>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.legendStrip}
-        contentContainerStyle={{ alignItems: 'center' }}
-      >
+      <View style={styles.legendStrip}>
         {legendItems.map((item) => (
           <View key={item.label} style={styles.legendItem}>
             <View style={[styles.legendSwatch, { backgroundColor: item.color }]} />
             <Text style={styles.legendText}>{item.label}</Text>
           </View>
         ))}
-      </ScrollView>
+      </View>
 
       <View style={styles.mapContainer}>
         <MapView
@@ -612,7 +616,9 @@ export default function MapScreen({ navigation, route }) {
                 anchor={{ x: 0.5, y: 0.5 }}
                 tracksViewChanges={false}
               >
-                <Text style={styles.toiletMarker}>🚻</Text>
+                <View style={styles.toiletMarker}>
+                  <Text style={styles.toiletMarkerText}>WC</Text>
+                </View>
                 <Callout>
                   <View style={styles.calloutContainer}>
                     <Text style={styles.calloutTitle}>Public toilet</Text>
@@ -745,7 +751,7 @@ export default function MapScreen({ navigation, route }) {
                 <Text style={styles.mapCardTitle} numberOfLines={1}>
                   To {activeRoute.destination.name}
                 </Text>
-                <Text style={styles.mapCardSubtitle}>
+                <Text style={styles.mapCardSubtitle} numberOfLines={1}>
                   {formatDuration(activeRoute.totalSeconds)} · {formatDistance(activeRoute.totalMeters)}{' '}
                   · from {activeRoute.startLabel}
                 </Text>

@@ -8,7 +8,7 @@ import { useSavedPlaces } from '../context/SavedPlacesContext';
 import { placeCategory, nearestLiftStation, formatCuisine, findPlace } from '../utils/places';
 import { liftTypeLabels } from '../utils/pistes';
 import { formatDistance } from '../utils/geo';
-import { isOpenNow } from '../utils/openingHours';
+import { isOpenNow, formatOpeningHours } from '../utils/openingHours';
 import { websiteUrl, phoneUrl, openLink } from '../utils/links';
 
 // Detaljeside for et enkelt sted - modtager stedet via route.params fra
@@ -58,7 +58,7 @@ export default function POIDetailScreen({ navigation, route }) {
         </View>
 
         <View style={[styles.badge, { backgroundColor: meta.color }]}>
-          <Text style={styles.badgeText}>{meta.label}</Text>
+          <Text style={styles.badgeText}>{meta.singular}</Text>
         </View>
 
         <Text style={[styles.subtitle, { textAlign: 'center' }]}>{poi.name}</Text>
@@ -83,15 +83,18 @@ export default function POIDetailScreen({ navigation, route }) {
         {poi.openingHours ? (
           <View style={styles.infoRow}>
             <Ionicons name="time-outline" size={16} color={colors.textDark} style={styles.infoRowIonicon} />
-            <Text style={styles.infoRowText}>
+            <View style={{ flexShrink: 1 }}>
               {open !== null ? (
-                <Text style={open ? styles.openNow : styles.closedNow}>
+                <Text style={[styles.hoursLine, open ? styles.openNow : styles.closedNow]}>
                   {open ? 'Open now' : 'Closed now'}
-                  {'  '}
                 </Text>
               ) : null}
-              {poi.openingHours}
-            </Text>
+              {formatOpeningHours(poi.openingHours).map((line) => (
+                <Text key={line} style={styles.hoursLine}>
+                  {line}
+                </Text>
+              ))}
+            </View>
           </View>
         ) : null}
         {cuisine ? (
@@ -106,11 +109,13 @@ export default function POIDetailScreen({ navigation, route }) {
         style={styles.button}
         onPress={() => navigation.navigate('Route', { destination: poi })}
       >
-        <Text style={styles.buttonText}>🧭 Route here</Text>
+        <Ionicons name="navigate" size={18} color={colors.white} style={styles.buttonIcon} />
+        <Text style={styles.buttonText}>Route here</Text>
       </TouchableOpacity>
       {onMap ? (
         <TouchableOpacity style={styles.buttonOutline} onPress={showOnMap}>
-          <Text style={styles.buttonOutlineText}>🗺️ Show on map</Text>
+          <Ionicons name="map-outline" size={18} color={colors.primary} style={styles.buttonIcon} />
+          <Text style={styles.buttonOutlineText}>Show on map</Text>
         </TouchableOpacity>
       ) : null}
       {phone ? (
@@ -118,12 +123,14 @@ export default function POIDetailScreen({ navigation, route }) {
           style={styles.buttonOutline}
           onPress={() => openLink(phone, 'This device cannot make phone calls.')}
         >
-          <Text style={styles.buttonOutlineText}>📞 Call {poi.phone}</Text>
+          <Ionicons name="call-outline" size={18} color={colors.primary} style={styles.buttonIcon} />
+          <Text style={styles.buttonOutlineText}>Call {poi.phone}</Text>
         </TouchableOpacity>
       ) : null}
       {website ? (
         <TouchableOpacity style={styles.buttonOutline} onPress={() => openLink(website)}>
-          <Text style={styles.buttonOutlineText}>🌐 Visit website</Text>
+          <Ionicons name="globe-outline" size={18} color={colors.primary} style={styles.buttonIcon} />
+          <Text style={styles.buttonOutlineText}>Visit website</Text>
         </TouchableOpacity>
       ) : null}
     </ScrollView>
