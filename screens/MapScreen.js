@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Alert, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Polyline, Polygon, Marker, Callout, LocalTile } from 'react-native-maps';
+import MapView, { Polyline, Polygon, Circle, Marker, Callout, UrlTile } from 'react-native-maps';
 import { lifts, pistes, pisteColors, verbierRegion, towns } from '../data/verbierMap';
 import { elevations } from '../data/elevations';
 import { pois } from '../data/pois';
@@ -44,8 +44,10 @@ const defaultActive = { ...allOff, restaurant: true, cafe: true, toilets: true, 
 // også skitur-ruter og en kælkebane (se utils/pistes.js).
 const downhillPisteCount = pistes.filter((piste) => pisteKind(piste) === 'downhill').length;
 
+const LIFT_COLOR = '#2b3a42';
+
 const legendItems = [
-  { label: 'Lift', color: '#444444' },
+  { label: 'Lift', color: LIFT_COLOR },
   { label: 'Green', color: pisteColors.novice },
   { label: 'Blue', color: pisteColors.easy },
   { label: 'Red', color: pisteColors.intermediate },
@@ -55,20 +57,57 @@ const legendItems = [
   { label: 'Sled run', color: colors.sled },
 ];
 
-// Apple Maps (iOS) understøtter ikke mapType="none" - dér falder den tilbage
-// til det almindelige Apple-kort. For at få samme flade "snekort" som på
-// Android gør vi tre ting på iOS (afprøvet i simulatoren):
-//   1. mapType="satellite": den eneste korttype uden Apples bynavne og veje.
-//   2. <LocalTile> med en sti, der ikke findes: et tomt flise-lag, som får
-//      MapKit til slet ikke at hente/tegne satellitbillederne.
-//   3. En stor, ensfarvet <Polygon> ovenpå som selve "sneen".
-const NO_TILES = '/skimaps-no-base-map/{z}/{x}/{y}.png';
+// Baggrundskortet er swisstopos åbne kortfliser (Schweiz' kortstyrelse):
+// gratis, ingen API-nøgle, men kildeangivelsen "©swisstopo" er et krav.
+//   relief: lys terrænskygge - ligner et snedækket bjerglandskab og lader
+//           vores egne lifter og pister være det, man ser.
+//   topo:   det officielle vinter-landkort med højdekurver, veje, huse og
+//           stednavne - godt, når man er zoomet ind i byen.
+// Fliserne findes for zoom 8-19 og kun for Schweiz (hele vores område).
+const TILE_BASE = 'https://wmts.geo.admin.ch/1.0.0';
+const baseMaps = {
+  relief: `${TILE_BASE}/ch.swisstopo.leichte-basiskarte_reliefschattierung/default/current/3857/{z}/{x}/{y}.png`,
+  topo: `${TILE_BASE}/ch.swisstopo.pixelkarte-farbe-winter/default/current/3857/{z}/{x}/{y}.jpeg`,
+};
+const MAX_TILE_ZOOM = 19;
+const DETAIL_FROM_ZOOM = 14; // herfra vises vinterkortet svagt oven på terrænet
+
+// Ensfarvet "sne" under fliserne på Android, så kortet ikke er gråt, mens
+// fliserne hentes, eller hvis der ikke er net. (På iOS lægger kortbiblioteket
+// altid flise-laget nederst og ville tegne fladen ovenpå, så dér udelades den.)
 const snowCover = [
   { latitude: 60, longitude: -15 },
   { latitude: 60, longitude: 30 },
   { latitude: 30, longitude: 30 },
   { latitude: 30, longitude: -15 },
 ];
+
+// Hvor tæt er der zoomet ind? Styrer stregtykkelse og hvor mange detaljer,
+// der vises, så oversigten ikke drukner i streger og nåle.
+//   far:  hele skiområdet    mid: et delområde    near: en by / en lift
+function zoomLevelFor(region) {
+  if (region.latitudeDelta > 0.08) return 'far';
+  if (region.latitudeDelta > 0.03) return 'mid';
+  return 'near';
+}
+const PISTE_WIDTH = { far: 2.5, mid: 3.5, near: 5 };
+const LIFT_WIDTH = { far: 1.5, mid: 2, near: 3 };
+
+// Midtpunktet på en linje - her står liftens navn, når man er zoomet ind.
+function midpointOf(coordinates) {
+  const first = coordinates[0];
+  const last = coordinates[coordinates.length - 1];
+  return {
+    latitude: (first.latitude + last.latitude) / 2,
+    longitude: (first.longitude + last.longitude) / 2,
+  };
+}
+
+// Alle liftstationer (begge ender af hver lift) - tegnes som små ringe.
+const liftStations = lifts.flatMap((lift) => [
+  { id: `${lift.id}-a`, ...lift.coordinates[0] },
+  { id: `${lift.id}-b`, ...lift.coordinates[lift.coordinates.length - 1] },
+]);
 
 const regionAround = (point) => ({
   latitude: point.latitude,
@@ -77,15 +116,16 @@ const regionAround = (point) => ({
   longitudeDelta: 0.012,
 });
 
-function pisteStyle(piste) {
+function pisteStyle(piste, level) {
   const kind = pisteKind(piste);
-  if (kind === 'sled') return { color: colors.sled, width: 3, dash: [6, 4] };
-  if (kind !== 'downhill') return { color: pisteColors.unknown, width: 2, dash: [3, 5] };
-  return {
-    color: pisteColors[piste.difficulty] || pisteColors.unknown,
-    width: 4,
-    dash: piste.difficulty === 'freeride' ? [4, 4] : undefined,
-  };
+  const width = PISTE_WIDTH[level];
+  if (kind === 'sled') return { color: colors.sled, width: width - 1, dash: [6, 4] };
+  if (kind !== 'downhill') return { color: pisteColors.unknown, width: 1.5, dash: [3, 5] };
+  if (piste.difficulty === 'freeride') {
+    // Off-piste: tyndere og stiplet, så den ikke ligner en præpareret pist.
+    return { color: pisteColors.freeride, width: width - 1, dash: [7, 6] };
+  }
+  return { color: pisteColors[piste.difficulty] || pisteColors.unknown, width };
 }
 
 // Tekst til info-kortet nederst, når man trykker på en lift eller pist.
@@ -111,9 +151,9 @@ function describeLine(selected) {
 
 // Rigtigt interaktivt kort over Verbier. Lifter og pister er ægte geodata
 // (data/verbierMap.js), steder kommer fra OpenStreetMap (data/places.js) og
-// filtreres med chips øverst. Kortet har ingen baggrundskort - kun en flad
-// "sne"-baggrund i stil med et illustreret pistekort. Tryk på en lift eller
-// pist for at se navn, type og længde i kortet nederst.
+// filtreres med chips øverst. Baggrunden er swisstopos terrænkort (se
+// baseMaps ovenfor). Stregtykkelse og detaljer følger zoom-niveauet. Tryk på
+// en lift eller pist for at se navn, type og længde i kortet nederst.
 //
 // Andre skærme kan styre kortet via route.params (altid sammen med en ny
 // `focusKey`, så samme genvej virker flere gange i træk):
@@ -133,6 +173,24 @@ export default function MapScreen({ navigation, route }) {
   // Det, brugeren har trykket på / er sendt hen til: { kind, item }, hvor
   // kind er 'lift' | 'piste' | 'place' | 'friend'.
   const [selected, setSelected] = useState(null);
+  const [level, setLevel] = useState(() => zoomLevelFor(verbierRegion));
+  const [baseMap, setBaseMap] = useState('relief'); // 'relief' | 'topo'
+
+  // Kaldes, når brugeren er færdig med at panorere/zoome. setLevel med samme
+  // værdi som før udløser ingen ny tegning, så det er billigt at kalde hver gang.
+  const lastRegion = useRef(verbierRegion);
+  const onRegionChangeComplete = (region) => {
+    lastRegion.current = region;
+    setLevel(zoomLevelFor(region));
+  };
+
+  // Skift mellem terræn og detaljeret vinterkort. Kortet bygges forfra
+  // (key={baseMap} på MapView) i det udsnit, man stod i: på iOS ender et
+  // flise-lag, der tilføjes senere, ellers OVEN PÅ pister og lifter.
+  const toggleBaseMap = () => {
+    mapReady.current = false;
+    setBaseMap((current) => (current === 'relief' ? 'topo' : 'relief'));
+  };
 
   const toggleFilter = (id) => setActive((prev) => ({ ...prev, [id]: !prev[id] }));
 
@@ -215,28 +273,28 @@ export default function MapScreen({ navigation, route }) {
     moveTo(regionAround(point));
   };
 
-  // De faste lag (lifter og pister) bygges kun én gang. Ellers ville alle
-  // ~350 linjer blive lavet forfra, hver gang man trykker på en filter-chip.
+  // Lifter og pister bygges kun forfra, når zoom-niveauet skifter (tre
+  // niveauer) - ikke hver gang man trykker på en filter-chip.
   const liftLines = useMemo(
     () =>
       lifts.map((lift) => (
         <Polyline
           key={lift.id}
           coordinates={lift.coordinates}
-          strokeColor="#444444"
-          strokeWidth={3}
-          lineDashPattern={[6, 4]}
+          strokeColor={LIFT_COLOR}
+          strokeWidth={LIFT_WIDTH[level]}
+          zIndex={2}
           tappable
           onPress={() => setSelected({ kind: 'lift', item: lift })}
         />
       )),
-    []
+    [level]
   );
 
   const pisteLines = useMemo(
     () =>
       pistes.map((piste) => {
-        const style = pisteStyle(piste);
+        const style = pisteStyle(piste, level);
         return (
           <Polyline
             key={piste.id}
@@ -244,11 +302,31 @@ export default function MapScreen({ navigation, route }) {
             strokeColor={style.color}
             strokeWidth={style.width}
             lineDashPattern={style.dash}
+            lineCap="round"
+            lineJoin="round"
+            zIndex={1}
             tappable
             onPress={() => setSelected({ kind: 'piste', item: piste })}
           />
         );
       }),
+    [level]
+  );
+
+  // Liftstationer som små ringe. Radius er i meter, så de følger zoom af sig selv.
+  const stationCircles = useMemo(
+    () =>
+      liftStations.map((station) => (
+        <Circle
+          key={station.id}
+          center={{ latitude: station.latitude, longitude: station.longitude }}
+          radius={22}
+          fillColor={colors.white}
+          strokeColor={LIFT_COLOR}
+          strokeWidth={2}
+          zIndex={3}
+        />
+      )),
     []
   );
 
@@ -297,22 +375,29 @@ export default function MapScreen({ navigation, route }) {
         })}
       </ScrollView>
 
-      <View style={styles.legendCard}>
-        <View style={styles.legendRow}>
-          {legendItems.map((item) => (
-            <View key={item.label} style={styles.legendItem}>
-              <View style={[styles.legendSwatch, { backgroundColor: item.color }]} />
-              <Text style={styles.legendText}>{item.label}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.legendStrip}
+        contentContainerStyle={{ alignItems: 'center' }}
+      >
+        {legendItems.map((item) => (
+          <View key={item.label} style={styles.legendItem}>
+            <View style={[styles.legendSwatch, { backgroundColor: item.color }]} />
+            <Text style={styles.legendText}>{item.label}</Text>
+          </View>
+        ))}
+      </ScrollView>
 
       <View style={styles.mapContainer}>
         <MapView
+          key={baseMap}
           ref={mapRef}
           style={styles.map}
-          initialRegion={verbierRegion}
+          initialRegion={lastRegion.current}
+          // Vores egne fliser erstatter baggrundskortet. "none" findes kun på
+          // Android; på iOS er "satellite" den eneste type uden Apples bynavne
+          // og veje ovenpå (afprøvet i simulatoren).
           mapType={Platform.OS === 'android' ? 'none' : 'satellite'}
           showsUserLocation={permission === 'granted'}
           showsMyLocationButton={false}
@@ -321,16 +406,40 @@ export default function MapScreen({ navigation, route }) {
           showsTraffic={false}
           showsCompass={false}
           toolbarEnabled={false}
+          minZoomLevel={10}
+          maxZoomLevel={18}
           onMapReady={onMapReady}
+          onRegionChangeComplete={onRegionChangeComplete}
         >
-          {Platform.OS === 'ios' && <LocalTile pathTemplate={NO_TILES} tileSize={256} />}
-          {Platform.OS === 'ios' && (
-            <Polygon coordinates={snowCover} fillColor={colors.iceLight} strokeWidth={0} />
+          {Platform.OS === 'android' && (
+            <Polygon coordinates={snowCover} fillColor={colors.iceLight} strokeWidth={0} zIndex={-2} />
+          )}
+          <UrlTile
+            urlTemplate={baseMaps[baseMap]}
+            maximumZ={MAX_TILE_ZOOM}
+            tileSize={256}
+            shouldReplaceMapContent
+            zIndex={-1}
+          />
+          {/* Tæt på har terrænskyggen ikke mere at vise. Dér lægges vinterkortet
+              svagt ovenpå, så gader, huse, højdekurver og stednavne anes uden
+              at overdøve pisterne. `minimumZ` gør, at laget slet ikke hentes,
+              når man er zoomet ud. */}
+          {baseMap === 'relief' && (
+            <UrlTile
+              urlTemplate={baseMaps.topo}
+              minimumZ={DETAIL_FROM_ZOOM}
+              maximumZ={MAX_TILE_ZOOM}
+              tileSize={256}
+              opacity={0.3}
+              zIndex={-1}
+            />
           )}
 
-          {/* Lifter (grå, stiplede) og pister (farvet efter sværhedsgrad) */}
-          {liftLines}
+          {/* Pister (farvet efter sværhedsgrad), lifter ovenpå, stationer øverst */}
           {pisteLines}
+          {liftLines}
+          {stationCircles}
 
           {/* Den valgte lift/pist fremhæves med en bred, lys kant */}
           {lineInfo && (
@@ -360,17 +469,36 @@ export default function MapScreen({ navigation, route }) {
             </>
           )}
 
-          {/* Bynavne - vises som tekst, da baggrundskortet er slået fra */}
-          {towns.map((town) => (
-            <Marker
-              key={town.id}
-              coordinate={{ latitude: town.latitude, longitude: town.longitude }}
-              anchor={{ x: 0.5, y: 0.5 }}
-              tracksViewChanges={false}
-            >
-              <Text style={styles.townLabel}>{town.name}</Text>
-            </Marker>
-          ))}
+          {/* Bynavne - terrænkortet har ingen tekst (topo-kortet har sine egne) */}
+          {baseMap === 'relief' &&
+            towns.map((town) => (
+              <Marker
+                key={town.id}
+                coordinate={{ latitude: town.latitude, longitude: town.longitude }}
+                // Navnet står lige under byens punkt, så nålene (der peger
+                // opad fra deres punkt) ikke dækker det.
+                anchor={{ x: 0.5, y: -0.4 }}
+                zIndex={15}
+                tracksViewChanges={false}
+                tappable={false}
+              >
+                <Text style={styles.townLabel}>{town.name}</Text>
+              </Marker>
+            ))}
+
+          {/* Liftnavne midt på liften, når man er zoomet helt ind */}
+          {level === 'near' &&
+            lifts.map((lift) => (
+              <Marker
+                key={`label-${lift.id}`}
+                coordinate={midpointOf(lift.coordinates)}
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
+                tappable={false}
+              >
+                <Text style={styles.liftLabel}>{lift.name}</Text>
+              </Marker>
+            ))}
 
           {/* Kuraterede "featured" steder - altid synlige, store nåle */}
           {pois.map((poi) => (
@@ -391,20 +519,27 @@ export default function MapScreen({ navigation, route }) {
             </Marker>
           ))}
 
-          {/* Rigtige OSM-steder, filtrérbare via chips øverst */}
+          {/* Rigtige OSM-steder, filtrérbare via chips øverst. Zoomet ud er de
+              små farvede prikker; zoomet ind får de deres emoji. `key` skifter
+              med, fordi Android ellers ikke tegner en markør om. */}
           {visiblePlaces.map((place) => {
             const meta = categoryMeta[place.category];
+            const compact = level === 'far';
             return (
               <Marker
-                key={place.id}
+                key={`${place.id}-${compact ? 'dot' : 'full'}`}
                 coordinate={{ latitude: place.latitude, longitude: place.longitude }}
                 anchor={{ x: 0.5, y: 0.5 }}
                 tracksViewChanges={false}
                 onCalloutPress={() => navigation.navigate('POIDetail', { poi: place })}
               >
-                <View style={[styles.placeDot, { backgroundColor: meta.color }]}>
-                  <Text style={styles.placeDotEmoji}>{meta.emoji}</Text>
-                </View>
+                {compact ? (
+                  <View style={[styles.placeDotSmall, { backgroundColor: meta.color }]} />
+                ) : (
+                  <View style={[styles.placeDot, { backgroundColor: meta.color }]}>
+                    <Text style={styles.placeDotEmoji}>{meta.emoji}</Text>
+                  </View>
+                )}
                 <Callout>
                   <View style={styles.calloutContainer}>
                     <Text style={styles.calloutTitle}>{place.name}</Text>
@@ -415,8 +550,9 @@ export default function MapScreen({ navigation, route }) {
             );
           })}
 
-          {/* Offentlige toiletter - rigtige placeringer fra OpenStreetMap */}
+          {/* Offentlige toiletter (OpenStreetMap) - en detalje, så først når man zoomer ind */}
           {active.toilets &&
+            level !== 'far' &&
             toilets.map((wc) => (
               <Marker
                 key={wc.id}
@@ -480,16 +616,28 @@ export default function MapScreen({ navigation, route }) {
           )}
         </MapView>
 
-        <TouchableOpacity
-          style={styles.locateButton}
-          onPress={goToMyLocation}
-          accessibilityLabel="Show my location"
-        >
-          <Ionicons name="locate" size={22} color={colors.primary} />
-        </TouchableOpacity>
-
-        {/* OpenStreetMap-data kræver synlig kildeangivelse (ODbL-licensen) */}
-        <Text style={styles.mapAttribution}>© OpenStreetMap contributors · OpenSkiMap</Text>
+        <View style={styles.mapButtons}>
+          <TouchableOpacity
+            style={styles.mapButton}
+            onPress={goToMyLocation}
+            accessibilityLabel="Show my location"
+          >
+            <Ionicons name="locate" size={22} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.mapButton, baseMap === 'topo' && styles.mapButtonActive]}
+            onPress={toggleBaseMap}
+            accessibilityLabel={
+              baseMap === 'relief' ? 'Switch to detailed topographic map' : 'Switch to terrain map'
+            }
+          >
+            <Ionicons
+              name="layers"
+              size={21}
+              color={baseMap === 'topo' ? colors.white : colors.primary}
+            />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.mapCards} pointerEvents="box-none">
           {lineInfo && (
@@ -563,6 +711,12 @@ export default function MapScreen({ navigation, route }) {
           )}
         </View>
       </View>
+
+      {/* Kildeangivelse er et krav fra både OpenStreetMap (ODbL) og swisstopo.
+          Den står under kortet, så info-kort og knapper aldrig dækker den. */}
+      <Text style={styles.mapAttribution}>
+        Map data © OpenStreetMap contributors · OpenSkiMap · ©swisstopo
+      </Text>
     </SafeAreaView>
   );
 }

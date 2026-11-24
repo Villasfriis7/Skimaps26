@@ -14,8 +14,12 @@ og denne README er på dansk.
 - **Map** - interaktivt kort over Verbier med ægte geodata fra OpenStreetMap/OpenSkiMap:
   47 lifter, 275 pist-stykker (farvet efter rigtig sværhedsgrad), 322 steder
   (restauranter/caféer/après-ski/hoteller/ski rental) og 20 offentlige toiletter.
-  Filtrérbart via kategori-chips. Tryk på en lift eller pist for navn, type, længde og
-  højdeforskel. "Min position"-knappen beder om lokationstilladelse og viser, hvor du er.
+  Baggrunden er swisstopos terrænkort, så bjergene ses som snedækket relief; zoomer man
+  ind, anes gader, højdekurver og stednavne, og en knap skifter til det fulde vinter-landkort.
+  Stregtykkelse og detaljer følger zoom: på afstand er steder små prikker, tæt på får de
+  ikoner, og lifterne får stationer og navne. Filtrérbart via kategori-chips. Tryk på en lift
+  eller pist for navn, type, længde og højdeforskel. "Min position"-knappen beder om
+  lokationstilladelse og viser, hvor du er.
 - **Rutefinding** - "Route here" på et sted beregner den hurtigste vej dertil via lifter og
   pister: vælg startpunkt (din position eller en liftstation) og den sværeste pist, du vil
   køre, og få en trin-for-trin-rute, som også kan vises på kortet.
@@ -58,9 +62,13 @@ Mock-data (opdigtet eksempeldata): venner, partner-rabatter og brugerprofilen.
 
 - Kort- og stedsdata © [OpenStreetMap](https://www.openstreetmap.org/copyright)-bidragydere
   (ODbL), lift- og pistedata via [OpenSkiMap](https://openskimap.org).
+- Baggrundskort (terrænskygge og vinter-landkort) fra Federal Office of Topography
+  [©swisstopo](https://www.swisstopo.admin.ch/en/terms-of-use-free-geodata-and-geoservices).
+  Fliserne er gratis og kræver ingen API-nøgle, men dækker kun Schweiz, og tjenesten har
+  en fair use-grænse.
 - Vejr- og højdedata fra [Open-Meteo](https://open-meteo.com) (CC BY 4.0).
 
-Begge dele krediteres også inde i appen (på kortet og på vejrsiden).
+Alle tre krediteres også inde i appen (under kortet og på vejrsiden).
 
 ## Tech stack
 

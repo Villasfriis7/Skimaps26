@@ -116,7 +116,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 18,
     overflow: 'hidden',
-    marginBottom: 12,
+    marginBottom: 6,
     ...cardShadow,
   },
   map: {
@@ -124,12 +124,24 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.iceLight,
   },
   townLabel: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: colors.primary,
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.deep,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
     textShadowColor: '#fff',
-    textShadowRadius: 3,
+    textShadowRadius: 4,
     textShadowOffset: { width: 0, height: 0 },
+  },
+  liftLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2b3a42',
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderRadius: 6,
+    overflow: 'hidden',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
   },
   placeDot: {
     width: 20,
@@ -139,6 +151,14 @@ export const styles = StyleSheet.create({
     borderColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // Samme sted, set på afstand: bare en lille farvet prik.
+  placeDotSmall: {
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    borderWidth: 1.5,
+    borderColor: colors.white,
   },
   placeDotEmoji: {
     fontSize: 10,
@@ -168,29 +188,30 @@ export const styles = StyleSheet.create({
     borderColor: colors.accent,
     backgroundColor: 'rgba(63,167,214,0.18)',
   },
-  locateButton: {
+  // Knapperne øverst til højre på kortet (min position, skift baggrundskort).
+  mapButtons: {
     position: 'absolute',
     top: 12,
     right: 12,
+  },
+  mapButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 10,
     ...cardShadow,
   },
+  mapButtonActive: {
+    backgroundColor: colors.primary,
+  },
   mapAttribution: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
     fontSize: 10,
     color: colors.textMuted,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 6,
-    overflow: 'hidden',
-    paddingVertical: 2,
-    paddingHorizontal: 6,
+    textAlign: 'center',
+    marginBottom: 8,
   },
   // Info-kort oven på kortets nederste kant (valgt lift/pist/sted, aktiv rute).
   mapCards: {
@@ -253,24 +274,16 @@ export const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 2,
   },
-  legendCard: {
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    ...cardShadow,
-  },
-  legendRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
+  // Smal, vandret signaturforklaring over kortet (kan scrolles sidelæns).
+  legendStrip: {
+    flexGrow: 0,
+    height: 22,
+    marginBottom: 10,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 8,
-    marginVertical: 3,
+    marginRight: 14,
   },
   legendSwatch: {
     width: 14,
@@ -774,7 +787,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     flexGrow: 0,
     height: 44,
-    marginBottom: 18,
+    marginBottom: 12,
   },
   categoryChip: {
     flexDirection: 'row',
