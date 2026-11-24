@@ -34,7 +34,8 @@
         {
           "locationWhenInUsePermission": "SkiMaps shows your position on the ski map so you can see where you are in relation to lifts and pistes."
         }
-      ]
+      ],
+      "expo-status-bar"
     ]
   }
 }
