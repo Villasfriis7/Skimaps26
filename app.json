@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "skimaps",
+    "name": "SkiMaps",
     "slug": "skimaps",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,7 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Skimaps viser din position på skikortet, så du kan se, hvor du er i forhold til lifter og pister."
+        "NSLocationWhenInUseUsageDescription": "SkiMaps shows your position on the ski map so you can see where you are in relation to lifts and pistes."
       }
     },
     "android": {
@@ -19,10 +19,22 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SkiMaps shows your position on the ski map so you can see where you are in relation to lifts and pistes."
+        }
+      ]
+    ]
   }
 }
