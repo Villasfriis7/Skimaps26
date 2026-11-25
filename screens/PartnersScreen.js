@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,110 +13,108 @@ function partnerLocation(partner) {
   const place = partner.placeId ? findPlace(partner.placeId) : null;
   if (!place) return partner.location || '';
   const nearest = nearestLiftStation(place);
-  return `${formatDistance(nearest.meters)} from ${nearest.lift.name}`;
+  return `${formatDistance(nearest.meters)} from ${nearest.lift.name} lift`;
 }
 
 // Partners-fanen - viser rabatter/tilbud hos lokale partnere i Verbier.
-// Mock-data: virksomhederne findes, men tilbud og koder er eksempler, og det
-// står øverst på skærmen. Partnere, der findes som sted i appen, har en
-// "View place"-knap til detaljesiden.
-export default function PartnersScreen({ navigation }) {
+// Eksempeldata: virksomhederne findes, men tilbud og koder er opdigtede, og
+// det står både øverst på skærmen og i selve kode-boksen. Partnere, der
+// findes som sted i appen, har en "View place"-knap til detaljesiden.
+//
+// route.params.category (fra Explore) vælger en kategori på forhånd.
+export default function PartnersScreen({ navigation, route }) {
   const [activeCategory, setActiveCategory] = useState('all');
+
+  const requested = route.params?.category;
+  const focusKey = route.params?.focusKey;
+  useEffect(() => {
+    if (requested) setActiveCategory(requested);
+  }, [requested, focusKey]);
 
   const filtered =
     activeCategory === 'all' ? partners : partners.filter((p) => p.category === activeCategory);
 
   const showCode = (partner) => {
-    Alert.alert(partner.name, `Your discount code: ${partner.code}\n\nShow it when you pay.`);
+    Alert.alert(
+      `Example code: ${partner.code}`,
+      `${partner.name} is not a real SkiMaps partner yet, so the code will not work in the shop. This shows how an offer will look.`
+    );
   };
 
   const renderPartner = ({ item }) => {
     const place = item.placeId ? findPlace(item.placeId) : null;
     return (
       <View style={styles.partnerCard}>
-        <View style={styles.partnerCardIconWrap}>
-          <Ionicons
-            name={partnerCategories.find((c) => c.id === item.category)?.icon || 'pricetag-outline'}
-            size={26}
-            color={colors.primary}
-          />
+        <View style={styles.partnerTop}>
+          <View style={styles.discountTile}>
+            <Text style={styles.discountTileNumber} maxFontSizeMultiplier={1.2}>
+              {item.discount.split(' ')[0]}
+            </Text>
+            <Text style={styles.discountTileLabel} maxFontSizeMultiplier={1.2}>
+              off
+            </Text>
+          </View>
+          <View style={styles.rowTextWrap}>
+            <Text style={styles.rowTitle}>{item.name}</Text>
+            <Text style={styles.rowSubtitle}>{item.categoryLabel}</Text>
+          </View>
         </View>
-        <View style={styles.partnerCardBody}>
-          <View style={styles.partnerCardTopRow}>
-            <Text style={styles.partnerCardName}>{item.name}</Text>
-            <View style={styles.partnerDiscountBadge}>
-              <Text style={styles.partnerDiscountText}>{item.discount}</Text>
-            </View>
-          </View>
-          <Text style={styles.partnerCardCategory}>{item.categoryLabel}</Text>
-          <Text style={styles.partnerCardDescription}>{item.description}</Text>
-          <View style={styles.partnerCardLocationRow}>
-            <Ionicons name="location-outline" size={13} color={colors.textMuted} />
-            <Text style={styles.partnerCardDistance}>{partnerLocation(item)}</Text>
-          </View>
-          <View style={styles.partnerCardActions}>
-            <TouchableOpacity style={styles.showCodeButton} onPress={() => showCode(item)}>
-              <Text style={styles.showCodeButtonText}>Show code</Text>
+        <Text style={styles.partnerDescription}>{item.description}</Text>
+        <View style={styles.partnerLocationRow}>
+          <Ionicons name="location-outline" size={14} color={colors.textMuted} />
+          <Text style={styles.partnerLocation}>{partnerLocation(item)}</Text>
+        </View>
+        <View style={styles.partnerActions}>
+          <TouchableOpacity
+            style={styles.smallButton}
+            onPress={() => showCode(item)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.smallButtonText}>Show code</Text>
+          </TouchableOpacity>
+          {place ? (
+            <TouchableOpacity
+              style={styles.smallButton}
+              onPress={() => navigation.navigate('POIDetail', { poi: place })}
+              accessibilityRole="button"
+            >
+              <Text style={styles.smallButtonText}>View place</Text>
             </TouchableOpacity>
-            {place ? (
-              <TouchableOpacity
-                style={styles.showCodeButton}
-                onPress={() => navigation.navigate('POIDetail', { poi: place })}
-              >
-                <Text style={styles.showCodeButtonText}>View place</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
+          ) : null}
         </View>
       </View>
     );
   };
 
+  const chips = [{ id: 'all', name: 'All', icon: 'apps-outline' }, ...partnerCategories];
+
   return (
     <SafeAreaView style={styles.tabScreen} edges={['top']}>
       <View style={styles.screenHeader}>
-        <Text style={styles.screenHeaderTitle}>Partners</Text>
-        <Text style={styles.screenHeaderSubtitle}>
-          Verbier · demo offers, not real partnerships yet
+        <Text style={styles.screenTitle} accessibilityRole="header">
+          Partners
         </Text>
+        <Text style={styles.screenSubtitle}>Example offers - not real partnerships yet</Text>
       </View>
 
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={styles.categoryChipsRow}
-        contentContainerStyle={styles.categoryChipsContent}
+        style={styles.chipsRow}
+        contentContainerStyle={styles.chipsContent}
       >
-        <TouchableOpacity
-          style={[styles.categoryChip, activeCategory === 'all' && styles.categoryChipActive]}
-          onPress={() => setActiveCategory('all')}
-        >
-          <Ionicons
-            name="apps-outline"
-            size={15}
-            color={activeCategory === 'all' ? colors.white : colors.textDark}
-          />
-          <Text
-            style={[
-              styles.categoryChipText,
-              activeCategory === 'all' && styles.categoryChipTextActive,
-            ]}
-          >
-            All
-          </Text>
-        </TouchableOpacity>
-        {partnerCategories.map((cat) => {
+        {chips.map((cat) => {
           const active = activeCategory === cat.id;
           return (
             <TouchableOpacity
               key={cat.id}
-              style={[styles.categoryChip, active && styles.categoryChipActive]}
+              style={[styles.chip, active && styles.chipActive]}
               onPress={() => setActiveCategory(cat.id)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
             >
-              <Ionicons name={cat.icon} size={15} color={active ? colors.white : colors.textDark} />
-              <Text style={[styles.categoryChipText, active && styles.categoryChipTextActive]}>
-                {cat.name}
-              </Text>
+              <Ionicons name={cat.icon} size={16} color={active ? colors.white : colors.textDark} />
+              <Text style={[styles.chipText, active && styles.chipTextActive]}>{cat.name}</Text>
             </TouchableOpacity>
           );
         })}
@@ -128,7 +126,7 @@ export default function PartnersScreen({ navigation }) {
         renderItem={renderPartner}
         showsVerticalScrollIndicator={false}
         style={styles.listBleed}
-        contentContainerStyle={styles.listBleedContent}
+        contentContainerStyle={[styles.listBleedContent, { paddingTop: 4 }]}
       />
     </SafeAreaView>
   );

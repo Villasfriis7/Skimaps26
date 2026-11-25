@@ -40,7 +40,10 @@ const LIFT_SPEED = {
   magic_carpet: 0.7,
 };
 const LIFT_OVERHEAD_S = 240;
-const TWO_WAY_LIFTS = new Set(['gondola', 'cable_car']);
+// Lifter med lukkede kabiner kan også tages NED - og uden ski. "mixed_lift"
+// er en kombineret stole-/gondollift (fx Chaux Express): uden den kunne man
+// køre ud til La Chaux på blå pister, men ikke komme hjem igen uden en rød.
+const TWO_WAY_LIFTS = new Set(['gondola', 'cable_car', 'mixed_lift']);
 
 const WALK_SPEED = 1.1; // m/s i skistøvler
 const WALK_DETOUR = 1.3; // fugleflugt -> faktisk gåafstand
@@ -57,12 +60,20 @@ const VILLAGE_MAX_ELEVATION_M = 1800;
 
 // Hvilke sværhedsgrader er tilladt for hvert niveau i UI'et.
 export const skillLevels = [
+  // Uden ski: kun til fods og med lifter med lukkede kabiner.
+  { id: 'none', label: 'No skis', allowed: [], cabinsOnly: true },
   { id: 'easy', label: 'Blue', allowed: ['novice', 'easy'] },
   { id: 'intermediate', label: 'Red', allowed: ['novice', 'easy', 'intermediate'] },
   {
     id: 'advanced',
     label: 'Black',
     allowed: ['novice', 'easy', 'intermediate', 'advanced', 'expert'],
+  },
+  // Markerede, men upræparerede ski-ruter ("itinéraires") - fx Tortin.
+  {
+    id: 'freeride',
+    label: 'Off-piste',
+    allowed: ['novice', 'easy', 'intermediate', 'advanced', 'expert', 'extreme', 'freeride'],
   },
 ];
 
@@ -206,7 +217,7 @@ export function buildGraph({ lifts, pistes, elevations = {} }) {
         to: bottom,
         cost,
         meters,
-        step,
+        step: { ...step, down: true },
         coordinates: [...coordinates].reverse(),
       });
     }
@@ -276,7 +287,7 @@ export function isOnNetwork(graph, point) {
 // Returnerer { steps, totalSeconds, totalMeters } eller null, hvis der ikke
 // findes en rute med de tilladte sværhedsgrader.
 export function findRoute(graph, from, to, { skill = 'intermediate' } = {}) {
-  const level = skillLevels.find((l) => l.id === skill) || skillLevels[1];
+  const level = skillLevels.find((l) => l.id === skill) || skillLevels[2];
   const allowed = new Set(level.allowed);
 
   const starts = snapPoints(graph, from);
@@ -304,6 +315,7 @@ export function findRoute(graph, from, to, { skill = 'intermediate' } = {}) {
     if (cost > dist[index]) continue;
     for (const edge of graph.edges[index]) {
       if (edge.step.kind === 'piste' && !allowed.has(edge.step.difficulty)) continue;
+      if (level.cabinsOnly && edge.step.kind === 'lift' && !TWO_WAY_LIFTS.has(edge.step.liftType)) continue;
       const next = cost + edge.cost;
       if (next < dist[edge.to]) {
         dist[edge.to] = next;
@@ -364,12 +376,13 @@ export function findRoute(graph, from, to, { skill = 'intermediate' } = {}) {
     addStep({ kind: 'walk' }, walkSeconds(best.meters), best.meters * WALK_DETOUR, [graph.nodes[best.index], to]);
   }
 
-  // Ryd op i listen: helt korte gå-stykker og korte, unavngivne pist-stumper
-  // (forbindelser mellem to pister) er bare støj for brugeren. De tæller
+  // Ryd op i listen: helt korte gå-stykker og korte pist-stumper (under 120 m
+  // med navn, under 200 m uden - forbindelser mellem to pister) er bare støj
+  // for brugeren. De tæller
   // stadig med i den samlede tid og tegnes stadig på kortet.
   const visible = steps.filter((step) => {
     if (step.kind === 'walk') return step.meters >= 40;
-    if (step.kind === 'piste') return step.name || step.meters >= 200;
+    if (step.kind === 'piste') return step.meters >= (step.name ? 120 : 200);
     return true;
   });
 

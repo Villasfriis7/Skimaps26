@@ -7,8 +7,7 @@
 // de beregnes ud fra liftdataene (utils/places.js og utils/routing.js), så de
 // ikke kan komme til at modsige kortet.
 //
-// `emoji` bruges kun på Featured-kortene på Explore, så de fem kort ikke ser
-// ens ud.
+// `tagline` er den korte type-tekst på Featured-kortene på Explore.
 //
 // `replaces` er id'et på det samme sted i data/places.js, så stedet ikke
 // vises to gange på kortet eller i søgningen.
@@ -17,7 +16,7 @@ export const pois = [
     id: '1',
     name: 'Le Rouge',
     category: 'restaurant',
-    emoji: '🍹',
+    tagline: 'Restaurant & bar',
     featured: true,
     description:
       'Popular restaurant and bar with a sun terrace and a lively atmosphere once the ski day is over.',
@@ -31,7 +30,7 @@ export const pois = [
     id: '2',
     name: 'Chez Dany',
     category: 'restaurant',
-    emoji: '🌲',
+    tagline: 'Mountain restaurant',
     featured: true,
     description:
       'Classic mountain restaurant in the forest hamlet of Clambin, known for home-style food and a cosy atmosphere.',
@@ -46,7 +45,7 @@ export const pois = [
     id: '3',
     name: 'Le Carrefour',
     category: 'restaurant',
-    emoji: '🍽️',
+    tagline: 'Restaurant',
     featured: true,
     replaces: 'rest-54',
     description: 'Restaurant on the hillside just above Verbier village.',
@@ -60,7 +59,7 @@ export const pois = [
     id: '4',
     name: 'Cabane Mont Fort',
     category: 'restaurant',
-    emoji: '🏔️',
+    tagline: 'Mountain hut',
     featured: true,
     description:
       'Mountain hut at 2,457 m above La Chaux with panoramic views. A popular stop for confident skiers.',
@@ -74,7 +73,7 @@ export const pois = [
     id: '5',
     name: 'Le Dahu',
     category: 'restaurant',
-    emoji: '☀️',
+    tagline: 'Mountain restaurant',
     featured: true,
     replaces: 'rest-59',
     description: 'Sunny restaurant with a large terrace in the La Chaux area, right by the lifts.',

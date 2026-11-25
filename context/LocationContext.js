@@ -10,6 +10,8 @@ import * as Location from 'expo-location';
 //   location:   { latitude, longitude } eller null, hvis vi ikke kender den
 const LocationContext = createContext(null);
 
+const LOCATE_TIMEOUT_MS = 10000;
+
 const toPoint = (position) =>
   position ? { latitude: position.coords.latitude, longitude: position.coords.longitude } : null;
 
@@ -38,30 +40,69 @@ export function LocationProvider({ children }) {
     };
   }, []);
 
+  // Mens appen har lov, følger vi positionen (højst hver 20. meter), så rute
+  // og afstande ikke regnes fra, hvor man stod, da appen blev åbnet.
+  useEffect(() => {
+    if (permission !== 'granted') return undefined;
+    let subscription = null;
+    let cancelled = false;
+    Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, distanceInterval: 20, timeInterval: 10000 },
+      (position) => setLocation(toPoint(position))
+    )
+      .then((sub) => {
+        if (cancelled) sub.remove();
+        else subscription = sub;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
+  }, [permission]);
+
   // Beder om tilladelse (første gang viser systemet sin dialog) og henter en
-  // frisk position. Returnerer positionen eller null.
-  const requestLocation = useCallback(async () => {
+  // frisk position. Returnerer { point, reason }:
+  //   point:  positionen, eller null
+  //   reason: null | 'denied' (ingen tilladelse) | 'unavailable' (ingen GPS-fix)
+  // GPS'en får højst 10 sekunder; derefter bruges sidst kendte position.
+  const locate = useCallback(async () => {
+    let status;
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setPermission('denied');
-        return null;
-      }
-      setPermission('granted');
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-      const point = toPoint(position);
-      setLocation(point);
-      return point;
+      ({ status } = await Location.requestForegroundPermissionsAsync());
     } catch {
-      return null;
+      return { point: null, reason: 'unavailable' };
     }
+    if (status !== 'granted') {
+      setPermission('denied');
+      return { point: null, reason: 'denied' };
+    }
+    setPermission('granted');
+    let position = null;
+    try {
+      position = await Promise.race([
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), LOCATE_TIMEOUT_MS)),
+      ]);
+    } catch {
+      try {
+        position = await Location.getLastKnownPositionAsync();
+      } catch {
+        position = null;
+      }
+    }
+    const point = toPoint(position);
+    if (!point) return { point: null, reason: 'unavailable' };
+    setLocation(point);
+    return { point, reason: null };
   }, []);
 
+  // Kort form til de steder, der kun skal bruge positionen.
+  const requestLocation = useCallback(async () => (await locate()).point, [locate]);
+
   const value = useMemo(
-    () => ({ permission, location, requestLocation }),
-    [permission, location, requestLocation]
+    () => ({ permission, location, requestLocation, locate }),
+    [permission, location, requestLocation, locate]
   );
 
   return <LocationContext.Provider value={value}>{children}</LocationContext.Provider>;

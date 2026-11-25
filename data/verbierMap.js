@@ -11162,13 +11162,14 @@ export const pistes = [
 ];
 
 // Standard alpine sværhedsgrad-farver, brugt af MapScreen til at tegne pisterne.
+// Mørke nok til at kunne ses på det hvide sneterræn i sollys (mindst 3:1).
 export const pisteColors = {
-  novice: '#2ecc71',
-  easy: '#2196f3',
-  intermediate: '#e53935',
+  novice: '#1e8e3e',
+  easy: '#1565c0',
+  intermediate: '#d32f2f',
   advanced: '#1a1a1a',
   expert: '#1a1a1a',
   extreme: '#1a1a1a',
-  freeride: '#f39c12',
-  unknown: '#9e9e9e',
+  freeride: '#c2600a',
+  unknown: '#616161',
 };

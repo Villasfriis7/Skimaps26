@@ -1,30 +1,71 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  ActivityIndicator,
+  Linking,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { lifts, pisteColors, verbierRegion } from '../data/verbierMap';
+import { elevations } from '../data/elevations';
 import { useLocation } from '../context/LocationContext';
 import { useRoute, getSkiGraph } from '../context/RouteContext';
 import { findRoute, isOnNetwork, skillLevels } from '../utils/routing';
 import { liftBottom } from '../utils/places';
+import { defaultLift } from '../utils/reach';
 import { liftTypeLabels, difficultyLabels } from '../utils/pistes';
 import { distanceMeters, formatDistance, formatDuration } from '../utils/geo';
 import { styles, colors } from '../styles/styles';
 
 // Lifterne i alfabetisk rækkefølge til "start fra"-listen.
 const sortedLifts = [...lifts].sort((a, b) => a.name.localeCompare(b.name));
-// Médran er Verbiers hovedlift og derfor et fornuftigt startpunkt, når vi
-// ikke kender brugerens position.
-const defaultLift = lifts.find((lift) => lift.name.startsWith('Médran')) || lifts[0];
+
+// "Gondola · 1,532 → 2,200 m" - højderne skiller lifter med samme navn ad
+// (der er fx to, der hedder Tournelle).
+function liftDetails(lift) {
+  const type = liftTypeLabels[lift.liftType] || liftTypeLabels.unknown;
+  const [a, b] = elevations[lift.id] || [];
+  if (a === undefined || Math.abs(a - b) < 10) return type;
+  return `${type} · ${Math.min(a, b)} → ${Math.max(a, b)} m`;
+}
+
+// Sværeste pist på ruten - det, en nervøs skiløber vil vide først.
+const DIFFICULTY_ORDER = ['novice', 'easy', 'intermediate', 'advanced', 'expert', 'extreme', 'freeride'];
+const SHORT_DIFFICULTY = {
+  novice: 'Green',
+  easy: 'Blue',
+  intermediate: 'Red',
+  advanced: 'Black',
+  expert: 'Black',
+  extreme: 'Black',
+  freeride: 'Off-piste',
+};
+function hardestPiste(steps) {
+  let hardest = null;
+  for (const step of steps) {
+    if (step.kind !== 'piste') continue;
+    if (!hardest || DIFFICULTY_ORDER.indexOf(step.difficulty) > DIFFICULTY_ORDER.indexOf(hardest)) {
+      hardest = step.difficulty;
+    }
+  }
+  return hardest;
+}
 
 // Ét trin i ruten som tekst + ikon.
 function describeStep(step) {
+  const length = formatDistance(step.meters);
   if (step.kind === 'lift') {
     return {
-      icon: 'arrow-up-circle',
-      color: '#444444',
-      title: `Take ${step.name}`,
-      subtitle: liftTypeLabels[step.liftType] || liftTypeLabels.unknown,
+      // Gondoler og kabelbaner kan også tages ned - så skal der stå "down".
+      icon: step.down ? 'arrow-down-circle' : 'arrow-up-circle',
+      color: colors.primary,
+      title: step.down ? `Ride ${step.name} down` : `Take ${step.name}`,
+      subtitle: `${liftTypeLabels[step.liftType] || liftTypeLabels.unknown} · ${length}`,
     };
   }
   if (step.kind === 'piste') {
@@ -32,13 +73,13 @@ function describeStep(step) {
       icon: 'ellipse',
       color: pisteColors[step.difficulty] || pisteColors.unknown,
       title: step.name ? `Ski ${step.name}` : 'Ski an unnamed piste',
-      subtitle: difficultyLabels[step.difficulty] || difficultyLabels.unknown,
+      subtitle: `${difficultyLabels[step.difficulty] || difficultyLabels.unknown} · ${length}`,
     };
   }
   return {
     icon: 'walk',
     color: colors.textMuted,
-    title: `Walk ${formatDistance(step.meters)}`,
+    title: `Walk ${length}`,
     subtitle: 'On foot',
   };
 }
@@ -47,22 +88,27 @@ function describeStep(step) {
 // Brugeren vælger startpunkt (egen GPS-position eller en liftstation) og den
 // sværeste pist, de vil køre. Selve beregningen ligger i utils/routing.js;
 // "Show on map" lægger ruten i RouteContext, så kortet kan tegne den.
+//
+// route.params.start ({ choice, liftId }) bruges, når skærmen åbnes fra
+// kortets rutekort ("Steps"), så den viser samme rute som den, der er tegnet.
 export default function RouteScreen({ navigation, route }) {
-  const { destination } = route.params;
-  const { location, requestLocation } = useLocation();
-  const { setActiveRoute } = useRoute();
+  const { destination, start } = route.params;
+  const { location, locate } = useLocation();
+  const { setActiveRoute, skill, setSkill } = useRoute();
   const graph = getSkiGraph();
 
   // Start: brugerens position, hvis den ligger i skiområdet - ellers en lift.
   // `startChoice` er null, indtil brugeren selv har valgt; så længe følger vi
   // automatisk positionen, også hvis GPS'en først svarer, efter skærmen er åbnet.
-  const [startChoice, setStartChoice] = useState(null); // null | 'location' | 'lift'
+  const [startChoice, setStartChoice] = useState(start?.choice ?? null); // null | 'location' | 'lift'
   const locationUsable = location !== null && isOnNetwork(graph, location);
   const useMyLocation = locationUsable && startChoice !== 'lift';
-  const [startLift, setStartLift] = useState(defaultLift);
+  const [startLift, setStartLift] = useState(
+    () => lifts.find((lift) => lift.id === start?.liftId) || defaultLift
+  );
   const [picking, setPicking] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [query, setQuery] = useState('');
-  const [skill, setSkill] = useState('intermediate');
 
   const startPoint = useMyLocation ? location : liftBottom(startLift);
   const startLabel = useMyLocation ? 'your location' : startLift.name;
@@ -75,13 +121,41 @@ export default function RouteScreen({ navigation, route }) {
   );
 
   const destinationReachable = isOnNetwork(graph, destination);
+  const skillIndex = skillLevels.findIndex((level) => level.id === skill);
+  // Det næste niveau, der faktisk giver en rute (eller null, hvis intet gør).
+  const harderLevel =
+    result || !destinationReachable
+      ? null
+      : skillLevels
+          .slice(skillIndex + 1)
+          .find((level) => findRoute(graph, startPoint, destination, { skill: level.id })) || null;
+  const noRouteText =
+    skill === 'none'
+      ? `You can't get to ${destination.name} from ${startLabel} without skis - the way there includes a ski piste.`
+      : harderLevel
+        ? `There is no way to ${destination.name} from ${startLabel} on ${skillLevels[skillIndex].label.toLowerCase()} pistes or easier.`
+        : `No route found to ${destination.name} from ${startLabel}. Try another starting point.`;
 
   const chooseMyLocation = async () => {
-    const point = location || (await requestLocation());
+    if (locating) return;
+    setLocating(true);
+    const { point, reason } = await locate();
+    setLocating(false);
+    if (reason === 'denied') {
+      Alert.alert(
+        'Location is switched off',
+        'Allow location access for SkiMaps in your phone settings, or pick a lift station to start from.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ]
+      );
+      return;
+    }
     if (!point) {
       Alert.alert(
-        'Location unavailable',
-        'Allow location access for SkiMaps in your phone settings, or pick a lift station to start from.'
+        'Could not find your position',
+        'Your phone did not get a GPS position. Try again in a moment, or pick a lift station to start from.'
       );
       return;
     }
@@ -105,7 +179,13 @@ export default function RouteScreen({ navigation, route }) {
   };
 
   const showOnMap = () => {
-    setActiveRoute({ ...result, destination, startLabel });
+    setActiveRoute({
+      ...result,
+      destination,
+      startLabel,
+      skill,
+      start: { choice: useMyLocation ? 'location' : 'lift', liftId: startLift.id },
+    });
     navigation.popTo('MainTabs', {
       screen: 'Map',
       params: { showRoute: true, focusKey: Date.now() },
@@ -116,152 +196,205 @@ export default function RouteScreen({ navigation, route }) {
     lift.name.toLowerCase().includes(query.trim().toLowerCase())
   );
 
+  const hardest = result ? hardestPiste(result.steps) : null;
+  const liftCount = result ? result.steps.filter((step) => step.kind === 'lift').length : 0;
+
   return (
     <ScrollView
-      style={styles.container}
+      style={styles.screen}
       contentContainerStyle={styles.scrollContent}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
     >
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
 
       <View style={styles.card}>
-        <Text style={styles.routeFieldLabel}>From</Text>
-        <View style={styles.routeChoiceRow}>
-          <TouchableOpacity
-            style={[styles.categoryChip, useMyLocation && styles.categoryChipActive]}
-            onPress={chooseMyLocation}
-          >
-            <Ionicons name="locate" size={15} color={useMyLocation ? colors.white : colors.textDark} />
-            <Text style={[styles.categoryChipText, useMyLocation && styles.categoryChipTextActive]}>
-              My location
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.categoryChip, !useMyLocation && styles.categoryChipActive, { flexShrink: 1 }]}
-            onPress={() => setPicking((open) => !open)}
-          >
-            <Ionicons
-              name="triangle-outline"
-              size={15}
-              color={!useMyLocation ? colors.white : colors.textDark}
-            />
-            <Text
-              style={[styles.categoryChipText, !useMyLocation && styles.categoryChipTextActive]}
-              numberOfLines={1}
-            >
-              {startLift.name} lift
-            </Text>
-            <Ionicons
-              name={picking ? 'chevron-up' : 'chevron-down'}
-              size={15}
-              color={!useMyLocation ? colors.white : colors.textDark}
-              style={{ marginLeft: 4 }}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {picking ? (
-          <View style={styles.routePicker}>
-            <TextInput
-              style={styles.routePickerInput}
-              placeholder="Search lift stations..."
-              placeholderTextColor={colors.textMuted}
-              value={query}
-              onChangeText={setQuery}
-              autoCorrect={false}
-            />
-            {liftMatches.map((lift) => (
-              <TouchableOpacity
-                key={lift.id}
-                style={styles.routePickerRow}
-                onPress={() => chooseLift(lift)}
-              >
-                <Text style={styles.routePickerName}>{lift.name}</Text>
-                <Text style={styles.routePickerType}>
-                  {liftTypeLabels[lift.liftType] || liftTypeLabels.unknown}
-                </Text>
-              </TouchableOpacity>
-            ))}
-            {liftMatches.length === 0 ? (
-              <Text style={styles.mutedText}>No lift matches "{query}".</Text>
-            ) : null}
-          </View>
-        ) : null}
-
-        <Text style={[styles.routeFieldLabel, { marginTop: 16 }]}>To</Text>
+        <Text style={styles.fieldLabel}>To</Text>
         <Text style={styles.routeDestination}>{destination.name}</Text>
 
-        <Text style={[styles.routeFieldLabel, { marginTop: 16 }]}>Hardest piste I want to ski</Text>
-        <View style={styles.routeChoiceRow}>
-          {skillLevels.map((level) => {
-            const on = skill === level.id;
-            return (
+        {destinationReachable ? (
+          <>
+            <Text style={[styles.fieldLabel, { marginTop: 18 }]}>From</Text>
+            <View style={styles.chipsWrap}>
               <TouchableOpacity
-                key={level.id}
-                style={[styles.categoryChip, on && styles.categoryChipActive]}
-                onPress={() => setSkill(level.id)}
+                style={[styles.chip, styles.chipOnCard, useMyLocation && styles.chipActive]}
+                onPress={chooseMyLocation}
+                accessibilityRole="button"
+                accessibilityState={{ selected: useMyLocation, busy: locating }}
               >
-                <View
-                  style={[
-                    styles.skillDot,
-                    { backgroundColor: pisteColors[level.id], borderColor: on ? colors.white : 'transparent' },
-                  ]}
-                />
-                <Text style={[styles.categoryChipText, on && styles.categoryChipTextActive]}>
-                  {level.label}
+                {locating ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <Ionicons name="locate" size={16} color={useMyLocation ? colors.white : colors.textDark} />
+                )}
+                <Text style={[styles.chipText, useMyLocation && styles.chipTextActive]}>
+                  My location
                 </Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
+              <TouchableOpacity
+                style={[styles.chip, styles.chipOnCard, !useMyLocation && styles.chipActive, { flexShrink: 1 }]}
+                onPress={() => setPicking((open) => !open)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: !useMyLocation, expanded: picking }}
+                accessibilityLabel={`Start from a lift station, ${startLift.name}`}
+              >
+                <Ionicons
+                  name="triangle-outline"
+                  size={16}
+                  color={!useMyLocation ? colors.white : colors.textDark}
+                />
+                <Text
+                  style={[styles.chipText, !useMyLocation && styles.chipTextActive]}
+                  numberOfLines={1}
+                >
+                  {startLift.name} lift
+                </Text>
+                <Ionicons
+                  name={picking ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={!useMyLocation ? colors.white : colors.textDark}
+                  style={{ marginLeft: 4 }}
+                />
+              </TouchableOpacity>
+            </View>
+            {!useMyLocation && !picking ? (
+              <Text style={styles.routeHint}>The route starts at the lift's bottom station.</Text>
+            ) : null}
+
+            {picking ? (
+              <View style={styles.routePicker}>
+                <TextInput
+                  style={styles.routePickerInput}
+                  placeholder="Search lift stations..."
+                  placeholderTextColor={colors.textMuted}
+                  value={query}
+                  onChangeText={setQuery}
+                  autoCorrect={false}
+                />
+                {/* Fast højde med egen scroll, så 47 lifter ikke skubber resten
+                    af skærmen flere skærmhøjder ned. */}
+                <ScrollView
+                  style={styles.routePickerList}
+                  nestedScrollEnabled
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {liftMatches.map((lift) => (
+                    <TouchableOpacity
+                      key={lift.id}
+                      style={styles.routePickerRow}
+                      onPress={() => chooseLift(lift)}
+                    >
+                      <Text style={styles.routePickerName}>{lift.name}</Text>
+                      <Text style={styles.routePickerType}>{liftDetails(lift)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {liftMatches.length === 0 ? (
+                    <Text style={[styles.mutedText, { paddingVertical: 12 }]}>
+                      No lift matches "{query.trim()}".
+                    </Text>
+                  ) : null}
+                </ScrollView>
+              </View>
+            ) : null}
+
+            <Text style={[styles.fieldLabel, { marginTop: 18 }]}>Hardest piste allowed</Text>
+            <View style={styles.chipsWrap}>
+              {skillLevels.map((level) => {
+                const on = skill === level.id;
+                return (
+                  <TouchableOpacity
+                    key={level.id}
+                    style={[styles.chip, styles.chipOnCard, on && styles.chipActive]}
+                    onPress={() => setSkill(level.id)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: on }}
+                  >
+                    {level.id === 'none' ? (
+                      <Ionicons name="walk" size={16} color={on ? colors.white : colors.textDark} />
+                    ) : (
+                      <View
+                        style={[
+                          styles.skillDot,
+                          { backgroundColor: pisteColors[level.id], borderColor: on ? colors.white : 'transparent' },
+                        ]}
+                      />
+                    )}
+                    <Text style={[styles.chipText, on && styles.chipTextActive]}>
+                      {level.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </>
+        ) : null}
       </View>
 
       {!destinationReachable ? (
         <View style={styles.card}>
-          <Text style={styles.cardText}>
-            {destination.name} is too far from the lifts and pistes for a ski route.
+          <Text style={styles.cardTextLast}>
+            {destination.name} is too far from the lifts and pistes for a ski route. You can still
+            find it on the map.
           </Text>
         </View>
       ) : !result ? (
         <View style={styles.card}>
-          <Text style={styles.cardText}>
-            No route found from {startLabel} with these settings. Try allowing harder pistes or
-            another starting point.
-          </Text>
+          <Text style={harderLevel ? styles.cardText : styles.cardTextLast}>{noRouteText}</Text>
+          {harderLevel ? (
+            <TouchableOpacity style={styles.buttonSecondary} onPress={() => setSkill(harderLevel.id)}>
+              <Text style={styles.buttonSecondaryText}>
+                Show the route with {harderLevel.label.toLowerCase()} pistes
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : result.steps.length === 0 ? (
         <View style={styles.card}>
-          <Text style={styles.cardText}>You are already there - {destination.name} is right here.</Text>
+          <Text style={styles.cardTextLast}>
+            You are already there - {destination.name} is right here.
+          </Text>
         </View>
       ) : (
         <>
           <View style={styles.routeSummary}>
             <Text style={styles.routeSummaryTime}>{formatDuration(result.totalSeconds)}</Text>
             <Text style={styles.routeSummaryMeta}>
-              {formatDistance(result.totalMeters)} · {result.steps.length}{' '}
-              {result.steps.length === 1 ? 'step' : 'steps'}
+              {formatDistance(result.totalMeters)}
+              {liftCount ? ` · ${liftCount} ${liftCount === 1 ? 'lift' : 'lifts'}` : ''}
+              {hardest ? ` · hardest piste: ${SHORT_DIFFICULTY[hardest]}` : ''}
             </Text>
           </View>
 
-          {result.steps.map((step, index) => {
-            const info = describeStep(step);
-            return (
-              <View key={step.key} style={styles.routeStep}>
-                <Text style={styles.routeStepNumber}>{index + 1}</Text>
-                <Ionicons name={info.icon} size={22} color={info.color} style={{ marginRight: 10 }} />
-                <View style={styles.listItemTextWrap}>
-                  <Text style={styles.routeStepTitle}>{info.title}</Text>
-                  <Text style={styles.listItemSubtitle}>{info.subtitle}</Text>
-                </View>
-                <Text style={styles.routeStepTime}>{formatDuration(step.seconds)}</Text>
-              </View>
-            );
-          })}
-
-          <TouchableOpacity style={styles.button} onPress={showOnMap}>
+          {/* Hovedhandlingen står over trinene, så man ikke skal scrolle forbi
+              en lang rute for at finde den. */}
+          <TouchableOpacity style={[styles.button, { marginBottom: 16 }]} onPress={showOnMap}>
             <Ionicons name="map-outline" size={18} color={colors.white} style={styles.buttonIcon} />
             <Text style={styles.buttonText}>Show on map</Text>
           </TouchableOpacity>
+
+          {/* Trinene som en tidslinje i ét kort: ikonerne i en søjle med en
+              streg imellem, så rækkefølgen kan læses med et blik. */}
+          <View style={[styles.group, { paddingTop: 14 }]}>
+            {result.steps.map((step, index) => {
+              const info = describeStep(step);
+              const last = index === result.steps.length - 1;
+              return (
+                <View key={step.key} style={styles.step}>
+                  <View style={styles.stepRail}>
+                    <View style={styles.stepIconWrap}>
+                      <Ionicons name={info.icon} size={step.kind === 'piste' ? 18 : 24} color={info.color} />
+                    </View>
+                    <View style={[styles.stepConnector, last && styles.stepConnectorHidden]} />
+                  </View>
+                  <View style={styles.stepBody}>
+                    <Text style={styles.stepTitle}>{info.title}</Text>
+                    <Text style={styles.rowSubtitle}>{info.subtitle}</Text>
+                  </View>
+                  <Text style={styles.stepTime}>{formatDuration(step.seconds)}</Text>
+                </View>
+              );
+            })}
+          </View>
 
           <Text style={styles.footnote}>
             Times and walking distances are estimates based on typical speeds. SkiMaps does not know

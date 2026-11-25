@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { weatherCodeMeta, formatCm } from '../data/weather';
+import { Ionicons } from '@expo/vector-icons';
+import { weatherCodeMeta, formatCm, formatUpdated } from '../data/weather';
 import { openLink } from '../utils/links';
 import { styles, colors } from '../styles/styles';
 
@@ -23,8 +24,8 @@ export default function WeatherDetailScreen({ route }) {
 
   if (!weather) {
     return (
-      <View style={styles.centeredContainer}>
-        <StatusBar style="light" />
+      <View style={styles.centered}>
+        <StatusBar style="dark" />
         <ActivityIndicator color={colors.primary} />
       </View>
     );
@@ -34,22 +35,26 @@ export default function WeatherDetailScreen({ route }) {
   const currentMeta = weatherCodeMeta(current.code, current.isDay);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <StatusBar style="light" />
-      <View style={styles.heroCard}>
-        <Text style={styles.heroTitle}>
-          {currentMeta.emoji} {current.temperature}°C
-        </Text>
-        <Text style={styles.heroSubtitle}>{currentMeta.label} · Verbier village (1,500 m)</Text>
-        <View style={styles.weatherChip}>
-          <Text style={styles.weatherChipText}>❄️ {current.snowConditions}</Text>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.scrollContent}>
+      <StatusBar style="dark" />
+
+      <View style={styles.weatherHero}>
+        <View style={styles.weatherHeroRow}>
+          <Ionicons name={currentMeta.icon} size={52} color={colors.white} />
+          <Text style={styles.weatherTemp}>{current.temperature}°</Text>
         </View>
+        <Text style={[styles.heroSubtitle, { fontSize: 15, marginTop: 4 }]}>
+          {currentMeta.label} · {current.snowConditions}
+        </Text>
+        <Text style={styles.heroSubtitle}>
+          Verbier village (1,500 m) · updated {formatUpdated(weather.fetchedAt)}
+        </Text>
       </View>
 
       <View style={styles.statsRow}>
         <View style={styles.statTile}>
           <Text style={styles.statNumber}>{current.snowDepthCm} cm</Text>
-          <Text style={styles.statLabel}>Snow depth</Text>
+          <Text style={styles.statLabel}>Snow in the village</Text>
         </View>
         <View style={styles.statTile}>
           <Text style={styles.statNumber}>{formatCm(current.snowfallTodayCm)} cm</Text>
@@ -61,35 +66,50 @@ export default function WeatherDetailScreen({ route }) {
         </View>
       </View>
 
-      <Text style={styles.sectionTitle}>6-day forecast</Text>
-      <View style={{ height: 12 }} />
-      {daily.map((d, i) => {
-        const meta = weatherCodeMeta(d.code);
-        const details = [meta.label];
-        if (d.snowfallCm > 0) details.push(`❄️ ${formatCm(d.snowfallCm)} cm`);
-        if (d.precipProbability != null) details.push(`💧 ${d.precipProbability}%`);
-        return (
-          <View key={d.date} style={styles.listItem}>
-            <View style={[styles.listItemIconWrap, { backgroundColor: colors.ice }]}>
-              <Text style={{ fontSize: 24 }}>{meta.emoji}</Text>
-            </View>
-            <View style={styles.listItemTextWrap}>
-              <Text style={styles.listItemTitle}>{i === 0 ? 'Today' : weekdayOf(d.date)}</Text>
-              <Text style={styles.listItemSubtitle}>{details.join(' · ')}</Text>
-            </View>
-            <Text style={styles.forecastTemps}>
-              {d.max}° / {d.min}°
-            </Text>
-          </View>
-        );
-      })}
-
-      <Text style={styles.footnote}>
-        Snow depth is the weather model's figure for the village, not a measured piste report - there
-        is usually more snow higher up.
+      <Text style={[styles.footnote, { marginTop: -12, marginBottom: 20 }]}>
+        These are the weather model's figures for the village, not a measured piste report. There is
+        usually more snow and more wind higher up.
       </Text>
+
+      <Text style={[styles.sectionTitle, { marginBottom: 12 }]} accessibilityRole="header">
+        6-day forecast
+      </Text>
+      <View style={styles.group}>
+        {daily.map((d, i) => {
+          const meta = weatherCodeMeta(d.code);
+          const details = [meta.label];
+          if (d.snowfallCm > 0) details.push(`${formatCm(d.snowfallCm)} cm snow`);
+          // Står der allerede "Snow" eller "Rain", er "88% chance" nok.
+          const wet = ['Snow', 'Rain', 'Drizzle', 'Thunderstorm'].includes(meta.label);
+          if (d.precipProbability != null && (wet || d.precipProbability > 0)) {
+            details.push(`${d.precipProbability}% chance${wet ? '' : ' of snow or rain'}`);
+          }
+          return (
+            <React.Fragment key={d.date}>
+              {i > 0 ? <View style={styles.rowDivider} /> : null}
+              <View style={styles.row}>
+                <View style={styles.rowTile}>
+                  <Ionicons name={meta.icon} size={22} color={colors.primary} />
+                </View>
+                <View style={styles.rowTextWrap}>
+                  <Text style={styles.rowTitle}>{i === 0 ? 'Today' : weekdayOf(d.date)}</Text>
+                  <Text style={styles.rowSubtitle}>{details.join(' · ')}</Text>
+                </View>
+                <Text
+                  style={styles.forecastHigh}
+                  accessibilityLabel={`High ${d.max} degrees, low ${d.min} degrees`}
+                >
+                  {d.max}° <Text style={styles.forecastLow}>{d.min}°</Text>
+                </Text>
+              </View>
+            </React.Fragment>
+          );
+        })}
+      </View>
+      <Text style={styles.footnote}>Each day shows the high and the low temperature.</Text>
+
       {/* Open-Meteo kræver kildeangivelse (CC BY 4.0) */}
-      <TouchableOpacity onPress={() => openLink('https://open-meteo.com/')}>
+      <TouchableOpacity onPress={() => openLink('https://open-meteo.com/')} accessibilityRole="link">
         <Text style={[styles.footnote, styles.footnoteLink]}>Weather data by Open-Meteo.com</Text>
       </TouchableOpacity>
     </ScrollView>

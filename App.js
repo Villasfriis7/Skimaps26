@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 
 import ExploreScreen from './screens/ExploreScreen';
 import MapScreen from './screens/MapScreen';
@@ -14,6 +15,8 @@ import POIDetailScreen from './screens/POIDetailScreen';
 import WeatherDetailScreen from './screens/WeatherDetailScreen';
 import SavedPlacesScreen from './screens/SavedPlacesScreen';
 import RouteScreen from './screens/RouteScreen';
+import PlacesListScreen from './screens/PlacesListScreen';
+import { categoryMeta } from './data/categoryMeta';
 import { SavedPlacesProvider } from './context/SavedPlacesContext';
 import { LocationProvider } from './context/LocationContext';
 import { RouteProvider } from './context/RouteContext';
@@ -39,10 +42,13 @@ const tabIcons = {
 function MainTabs() {
   return (
     <Tab.Navigator
+      // Androids tilbage-knap går til den fane, man kom fra - ikke altid Explore.
+      backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: '#9fb4bf',
+        // Mørk nok til at kunne læses i sollys (4,7:1 mod hvid).
+        tabBarInactiveTintColor: '#5f7884',
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
@@ -64,9 +70,14 @@ function MainTabs() {
 
 // Rod-stack: bund-navigationen plus detaljesiderne, som kan åbnes ovenpå
 // enhver fane (fx fra Explore eller Map) og automatisk skjuler fanebjælken.
-// Statusbaren er mørk på fanerne (lys baggrund); detaljesiderne har mørkeblå
-// header og sætter derfor selv <StatusBar style="light" />.
+// Alle skærme har samme lyse baggrund og mørk statusbar - også detaljesiderne,
+// der før havde en mørkeblå topbjælke og dermed lignede en anden app.
 export default function App() {
+  // Ikon-skrifttypen skal være indlæst, før noget tegnes: kortets markører
+  // tegnes kun én gang (tracksViewChanges={false}) og ville ellers stå uden ikon.
+  const [fontsLoaded, fontError] = useFonts(Ionicons.font);
+  if (!fontsLoaded && !fontError) return null;
+
   return (
     <SafeAreaProvider>
       <SavedPlacesProvider>
@@ -76,10 +87,12 @@ export default function App() {
               <StatusBar style="dark" />
               <RootStack.Navigator
                 screenOptions={{
-                  headerStyle: { backgroundColor: colors.primary },
-                  headerTintColor: '#fff',
-                  headerTitleStyle: { fontWeight: '700' },
+                  headerStyle: { backgroundColor: colors.ice },
+                  headerTintColor: colors.primary,
+                  headerTitleStyle: { fontWeight: '700', color: colors.textDark },
+                  headerShadowVisible: false,
                   headerBackButtonDisplayMode: 'minimal',
+                  contentStyle: { backgroundColor: colors.ice },
                 }}
               >
                 <RootStack.Screen
@@ -90,12 +103,14 @@ export default function App() {
                 <RootStack.Screen
                   name="POIDetail"
                   component={POIDetailScreen}
-                  options={({ route }) => ({ title: route.params.poi.name })}
+                  // Navnet står stort på selve siden - ikke også i topbjælken,
+                  // hvor lange navne blev skåret af.
+                  options={{ title: '' }}
                 />
                 <RootStack.Screen
                   name="WeatherDetail"
                   component={WeatherDetailScreen}
-                  options={{ title: 'Weather in Verbier' }}
+                  options={{ title: 'Weather' }}
                 />
                 <RootStack.Screen
                   name="SavedPlaces"
@@ -103,6 +118,13 @@ export default function App() {
                   options={{ title: 'Saved places' }}
                 />
                 <RootStack.Screen name="Route" component={RouteScreen} options={{ title: 'Route' }} />
+                <RootStack.Screen
+                  name="Places"
+                  component={PlacesListScreen}
+                  options={({ route }) => ({
+                    title: categoryMeta[route.params.category]?.label || 'Places',
+                  })}
+                />
               </RootStack.Navigator>
             </NavigationContainer>
           </RouteProvider>
