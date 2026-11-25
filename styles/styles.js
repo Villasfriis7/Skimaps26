@@ -1246,6 +1246,30 @@ export const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.white,
   },
+  // Flere steder samlet i én markør med antallet i. Navy og ikke en
+  // kategorifarve: en klynge blander kategorier, og et tryk er en handling
+  // (zoom ind). Hvid tekst på navy er ca. 9,6:1.
+  clusterMarker: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    borderWidth: 2,
+    borderColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Fra 10 og op: lidt større, så to cifre og "99+" har plads.
+  clusterMarkerLarge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  clusterMarkerText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   // Mørk prik med hvid kant - liftstationerne er hvide med mørk kant, så de
   // to må ikke ligne hinanden.
   toiletDotSmall: {

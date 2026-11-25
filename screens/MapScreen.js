@@ -43,6 +43,7 @@ import {
   regionForCoordinates,
 } from '../utils/geo';
 import { openLink } from '../utils/links';
+import { clusterPoints, spreadMeters } from '../utils/cluster';
 import { styles, colors } from '../styles/styles';
 
 // Filter-chips øverst på kortet. "toilets" og "friends" er ikke
@@ -116,6 +117,13 @@ const MAIN_LIFTS = new Set(['gondola', 'cable_car', 'mixed_lift']);
 // Liftstationernes ringe har radius i meter. Tæt på skal den være mindre,
 // ellers fylder de som store bolde.
 const STATION_RADIUS = { far: 26, mid: 18, near: 11 };
+
+// Klynger (utils/cluster.js): steder, hvis markører ville dække hinanden,
+// samles til én markør med et tal. Zoomet helt ind (udsnittet er under ca.
+// 450 m højt) vises alle steder hver for sig - tættere på kommer man næsten ikke.
+const CLUSTER_OFF_BELOW = 0.004;
+// Steder, der ligger tættere end dette, bliver aldrig skilt ad af at zoome.
+const CLUSTER_SAME_SPOT_METERS = 15;
 
 const middleOf = (coordinates) => coordinates[Math.floor(coordinates.length / 2)];
 
@@ -356,15 +364,17 @@ export default function MapScreen({ navigation, route }) {
   const [searchFocused, setSearchFocused] = useState(false);
 
   // Kaldes, når brugeren er færdig med at panorere/zoome. Udsnittet gemmes
-  // kun som state, når man er zoomet ind (det bruges til pist-skiltene), så
-  // oversigten ikke tegnes om ved hver panorering.
+  // hver gang, fordi klyngerne af steder regnes ud fra det. Linjerne afhænger
+  // kun af `level` (tre trin) og tegnes derfor ikke om ved hver panorering.
   const lastRegion = useRef(resortRegion);
   const onRegionChangeComplete = (next) => {
     lastRegion.current = next;
-    const nextLevel = zoomLevelFor(next);
-    setLevel(nextLevel);
-    if (nextLevel === 'near') setRegion(next);
+    setLevel(zoomLevelFor(next));
+    setRegion(next);
   };
+  // Pist-skiltene vælges efter udsnittet, men kun zoomet ind. Længere ude er
+  // værdien null, så skiltene ikke bygges forfra, hver gang kortet flyttes.
+  const labelRegion = level === 'near' ? region : null;
 
   // iOS lægger en linje ØVERST, hver gang dens udseende ændres. Når zoom
   // skifter stregtykkelsen på pister og lifter, ville de derfor lande oven på
@@ -738,39 +748,132 @@ export default function MapScreen({ navigation, route }) {
   const savedIds = useMemo(() => new Set(savedPlaces.map((place) => place.id)), [savedPlaces]);
   const selectedPlaceId = selected?.kind === 'place' ? selected.item.id : null;
 
+  const shownPlaces = useMemo(
+    () =>
+      allPlaces.filter(
+        (place) => place.id !== selectedPlaceId && (active[place.category] || savedIds.has(place.id))
+      ),
+    [allPlaces, active, savedIds, selectedPlaceId]
+  );
+
+  // Steder, der ville ligge oven i hinanden, samles i klynger - regnet ud
+  // forfra, hver gang udsnittet ændres. Gemte steder holdes udenfor: dem skal
+  // man altid kunne se som deres eget hjerte. Zoomet helt ind er der ingen
+  // klynger (og så afhænger markørerne heller ikke af udsnittet).
+  const clusterRegion = region.latitudeDelta < CLUSTER_OFF_BELOW ? null : region;
+  const placeGroups = useMemo(() => {
+    if (!clusterRegion) return { single: shownPlaces, clusters: [] };
+    const single = shownPlaces.filter((place) => savedIds.has(place.id));
+    const clusters = [];
+    const loose = shownPlaces.filter((place) => !savedIds.has(place.id));
+    for (const group of clusterPoints(loose, clusterRegion)) {
+      if (group.count === 1) single.push(group.points[0]);
+      else clusters.push(group);
+    }
+    return { single, clusters };
+  }, [shownPlaces, savedIds, clusterRegion]);
+
+  // Et tryk på en klynge zoomer ind på dens steder - det åbner ikke noget
+  // info-kort. `lastOverlayPress` sættes alligevel, så onMapPress ikke tager
+  // trykket for et tryk på tomt kort.
+  const lastClusterPress = useRef(null); // { id, at, latitudeDelta }
+  const onClusterPress = useCallback(
+    (cluster) => {
+      const now = Date.now();
+      lastOverlayPress.current = now;
+      const shown = lastRegion.current;
+      const before = lastClusterPress.current;
+      lastClusterPress.current = { id: cluster.id, at: now, latitudeDelta: shown.latitudeDelta };
+      // To tilfælde, hvor det ikke hjælper at zoome: stederne ligger (næsten)
+      // samme sted, eller sidste tryk på samme klynge fik ikke kortet tættere
+      // på (det står på største zoom). Så vælges det første sted i stedet, så
+      // man aldrig sidder fast på en klynge. Sekundet er til animationen -
+      // før den er færdig, kender vi ikke det nye udsnit.
+      const stuck =
+        before?.id === cluster.id &&
+        now - before.at > 1000 &&
+        shown.latitudeDelta > before.latitudeDelta * 0.9;
+      if (stuck || spreadMeters(cluster.points) < CLUSTER_SAME_SPOT_METERS) {
+        select('place', cluster.points[0]);
+        return;
+      }
+      const fit = regionForCoordinates(cluster.points, 1.6);
+      // regionForCoordinates går aldrig tættere på end 0.006 grader. Står
+      // kortet (næsten) dér i forvejen, ville trykket ikke flytte noget - så
+      // halveres udsnittet i stedet, til stederne skilles, eller kortet er så
+      // tæt på, at klyngerne hører op.
+      const share = Math.max(
+        fit.latitudeDelta / shown.latitudeDelta,
+        fit.longitudeDelta / shown.longitudeDelta
+      );
+      moveTo(
+        share < 0.7
+          ? fit
+          : {
+              latitude: fit.latitude,
+              longitude: fit.longitude,
+              latitudeDelta: shown.latitudeDelta / 2,
+              longitudeDelta: shown.longitudeDelta / 2,
+            }
+      );
+    },
+    [select, moveTo]
+  );
+
   const placeMarkers = useMemo(() => {
     const compact = level === 'far';
-    return allPlaces
-      .filter((place) => place.id !== selectedPlaceId && (active[place.category] || savedIds.has(place.id)))
-      .map((place) => {
-        const meta = categoryMeta[place.category];
-        const saved = savedIds.has(place.id);
-        const color = saved ? colors.saved : meta.color;
-        return (
-          <Marker
-            // `key` skifter med zoom-niveauet, fordi Android ellers ikke
-            // tegner en markør om.
-            key={`${place.id}-${compact ? 'dot' : 'full'}-${saved ? 's' : 'n'}`}
-            coordinate={{ latitude: place.latitude, longitude: place.longitude }}
-            anchor={{ x: 0.5, y: 0.5 }}
-            zIndex={saved ? 12 : 10}
-            tracksViewChanges={false}
-            onPress={() => select('place', place)}
-          >
-            {/* Den gennemsigtige ramme gør trykfladen større end selve prikken. */}
-            <View style={compact ? styles.markerHitSmall : styles.markerHit}>
-              {compact ? (
-                <View style={[styles.placeDotSmall, { backgroundColor: color }]} />
-              ) : (
-                <View style={[styles.placeDot, { backgroundColor: color }]}>
-                  <Ionicons name={saved ? 'heart' : meta.icon.replace('-outline', '')} size={14} color={colors.white} />
-                </View>
-              )}
-            </View>
-          </Marker>
-        );
-      });
-  }, [active, level, savedIds, selectedPlaceId, select]);
+    const singleMarkers = placeGroups.single.map((place) => {
+      const meta = categoryMeta[place.category];
+      const saved = savedIds.has(place.id);
+      const color = saved ? colors.saved : meta.color;
+      return (
+        <Marker
+          // `key` skifter med zoom-niveauet, fordi Android ellers ikke
+          // tegner en markør om.
+          key={`${place.id}-${compact ? 'dot' : 'full'}-${saved ? 's' : 'n'}`}
+          coordinate={{ latitude: place.latitude, longitude: place.longitude }}
+          anchor={{ x: 0.5, y: 0.5 }}
+          zIndex={saved ? 12 : 10}
+          tracksViewChanges={false}
+          onPress={() => select('place', place)}
+        >
+          {/* Den gennemsigtige ramme gør trykfladen større end selve prikken. */}
+          <View style={compact ? styles.markerHitSmall : styles.markerHit}>
+            {compact ? (
+              <View style={[styles.placeDotSmall, { backgroundColor: color }]} />
+            ) : (
+              <View style={[styles.placeDot, { backgroundColor: color }]}>
+                <Ionicons name={saved ? 'heart' : meta.icon.replace('-outline', '')} size={14} color={colors.white} />
+              </View>
+            )}
+          </View>
+        </Marker>
+      );
+    });
+    // Klyngerne kommer efter de enkelte steder og har højere zIndex, så de
+    // ligger øverst på både iOS (rækkefølge) og Android (zIndex).
+    const clusterMarkers = placeGroups.clusters.map((cluster) => (
+      <Marker
+        // Klyngens id indeholder antallet, så `key` skifter, når tallet gør -
+        // Android tegner ellers ikke markøren om.
+        key={cluster.id}
+        coordinate={{ latitude: cluster.latitude, longitude: cluster.longitude }}
+        anchor={{ x: 0.5, y: 0.5 }}
+        zIndex={13}
+        tracksViewChanges={false}
+        onPress={() => onClusterPress(cluster)}
+      >
+        <View style={styles.markerHit}>
+          <View style={[styles.clusterMarker, cluster.count >= 10 && styles.clusterMarkerLarge]}>
+            <Text style={styles.clusterMarkerText} maxFontSizeMultiplier={1.2}>
+              {cluster.count > 99 ? '99+' : cluster.count}
+            </Text>
+          </View>
+        </View>
+      </Marker>
+    ));
+    return [...singleMarkers, ...clusterMarkers];
+  }, [placeGroups, level, savedIds, select, onClusterPress]);
 
   const toiletMarkers = useMemo(() => {
     if (!active.toilets) return null;
@@ -848,8 +951,8 @@ export default function MapScreen({ navigation, route }) {
           </Text>
         </Marker>
       ));
-    const pisteNameLabels = (level === 'near' ? pisteLabels : [])
-      .filter(({ coordinate }) => inRegion(coordinate, region))
+    const pisteNameLabels = (labelRegion ? pisteLabels : [])
+      .filter(({ coordinate }) => inRegion(coordinate, labelRegion))
       .slice(0, 30)
       .map(({ group, label, coordinate }) => (
         <Marker
@@ -869,7 +972,7 @@ export default function MapScreen({ navigation, route }) {
         </Marker>
       ));
     return [...pisteNameLabels, ...liftNameLabels];
-  }, [level, region, select]);
+  }, [level, labelRegion, select]);
 
   // --- Info-kort ------------------------------------------------------------
   const routeTo = (destination) => navigation.navigate('Route', { destination });
