@@ -135,4 +135,14 @@ npm install
 npx expo start
 ```
 
+## Tests
+
+`npm test` kører knap 700 automatiske tests på 10-15 sekunder (Jest med `jest-expo`) - uden
+net og uden telefon. De dækker den rene logik i `utils/` og `data/weather.js`: rutefinding
+(i alle 11 indbyggede skiområder, fra hovedliften til hvert sted på hvert niveau), søgning,
+åbningstider, pistefarver pr. land, lagring af hentede områder og hentning fra
+OpenStreetMap/Open-Meteo med efterlignede svar (`__tests__/fixtures/`). Skærmene, kortet,
+`context/` og alt, der kræver en telefon (GPS, rigtige netværkskald), er ikke dækket. En test
+skrevet som `test.failing` beskriver en kendt fejl: når fejlen rettes, laves den om til `test`.
+
 Demovideo: https://youtube.com/shorts/dreyhnMPcoo?is=fh6kMi-d8DRQtNp1

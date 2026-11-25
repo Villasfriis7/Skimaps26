@@ -1,0 +1,170 @@
+[
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [13.3, 63.3] },
+    "properties": {
+      "type": "skiArea",
+      "id": "bydalen",
+      "name": "Bydalen - Åre Valley",
+      "status": "operating",
+      "activities": ["downhill"],
+      "runConvention": "europe",
+      "places": [{ "iso3166_1Alpha2": "SE", "localized": { "en": { "country": "Sweden", "region": "Jämtland County" } } }],
+      "statistics": {
+        "lifts": { "byType": { "drag_lift": { "count": 8 } } },
+        "runs": { "byActivity": { "downhill": { "byDifficulty": { "easy": { "lengthInKm": 12.2 } } } } }
+      },
+      "viewportHint": { "center": [13.3, 63.3], "rotatedWidthMeters": 3000, "rotatedHeightMeters": 4000 }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [9.0, 46.0] },
+    "properties": {
+      "type": "skiArea",
+      "id": "arena",
+      "name": "Arena Skidome",
+      "status": "operating",
+      "activities": ["downhill"],
+      "runConvention": "europe",
+      "places": [{ "iso3166_1Alpha2": "CH" }],
+      "statistics": {
+        "lifts": { "byType": { "magic_carpet": { "count": 1 } } },
+        "runs": { "byActivity": { "downhill": { "byDifficulty": { "novice": { "lengthInKm": 0.4 } } } } }
+      }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [13.0, 63.0] },
+    "properties": {
+      "type": "lift",
+      "id": "are-gondola",
+      "name": "Åre Gondola",
+      "status": "operating",
+      "liftType": "gondola"
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [13.079, 63.399] },
+    "properties": {
+      "type": "skiArea",
+      "id": "are",
+      "name": "Åre",
+      "status": "operating",
+      "activities": ["downhill", "nordic"],
+      "runConvention": "europe",
+      "places": [{ "iso3166_1Alpha2": "SE", "localized": { "en": { "country": "Sweden", "region": "Jämtland County" } } }],
+      "statistics": {
+        "lifts": { "byType": { "chair_lift": { "count": 6 }, "drag_lift": { "count": 20 }, "gondola": { "count": 2 } } },
+        "runs": {
+          "byActivity": {
+            "downhill": {
+              "byDifficulty": {
+                "easy": { "count": 30, "lengthInKm": 40.4 },
+                "intermediate": { "count": 20, "lengthInKm": 30.3 },
+                "advanced": { "count": 5 }
+              }
+            },
+            "nordic": { "byDifficulty": { "easy": { "lengthInKm": 99 } } }
+          }
+        }
+      },
+      "viewportHint": { "center": [13.08, 63.4], "rotatedWidthMeters": 6000, "rotatedHeightMeters": 8000 }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [12.1, 63.3] },
+    "properties": {
+      "type": "skiArea",
+      "id": "storlien",
+      "name": "Storlien",
+      "status": "operating",
+      "activities": ["downhill"],
+      "places": [],
+      "statistics": { "lifts": { "byType": { "drag_lift": { "count": 5 } } } }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [13.1, 63.4] },
+    "properties": {
+      "type": "skiArea",
+      "id": "old",
+      "name": "Åreskutan Old Lift",
+      "status": "abandoned",
+      "activities": ["downhill"],
+      "statistics": { "lifts": { "byType": { "drag_lift": { "count": 1 } } } }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [13.1, 63.4] },
+    "properties": {
+      "type": "skiArea",
+      "id": "nordic",
+      "name": "Åre Längdspår",
+      "status": "operating",
+      "activities": ["nordic"],
+      "statistics": { "lifts": { "byType": { "drag_lift": { "count": 1 } } } }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [13.1, 63.4] },
+    "properties": {
+      "type": "skiArea",
+      "id": "no-lifts",
+      "name": "Åre Minibacke",
+      "status": "operating",
+      "activities": ["downhill"],
+      "statistics": { "lifts": { "byType": {} } }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [140.68, 42.86] },
+    "properties": {
+      "type": "skiArea",
+      "id": "niseko",
+      "name": "ニセコユナイテッド, Niseko United",
+      "status": "operating",
+      "activities": ["downhill"],
+      "runConvention": "japan",
+      "places": [{ "iso3166_1Alpha2": "JP" }],
+      "statistics": {
+        "lifts": { "byType": { "gondola": { "count": 3 }, "chair_lift": { "count": 25 } } },
+        "runs": { "byActivity": { "downhill": { "byDifficulty": { "easy": { "lengthInKm": 20.5 }, "advanced": { "lengthInKm": 10 } } } } }
+      }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": { "type": "Point", "coordinates": [13.1, 63.4] },
+    "properties": {
+      "type": "skiArea",
+      "id": "nameless",
+      "name": null,
+      "status": "operating",
+      "activities": ["downhill"],
+      "statistics": { "lifts": { "byType": { "drag_lift": { "count": 2 } } } }
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[[13.0, 63.0], [13.1, 63.0], [13.1, 63.1], [13.0, 63.0]]]
+    },
+    "properties": {
+      "type": "skiArea",
+      "id": "no-center",
+      "name": "Åre Utan Mittpunkt",
+      "status": "operating",
+      "activities": ["downhill"],
+      "statistics": { "lifts": { "byType": { "drag_lift": { "count": 2 } } } }
+    }
+  }
+]

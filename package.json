@@ -22,7 +22,24 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "jest"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "modulePaths": [
+      "<rootDir>/node_modules/expo/node_modules"
+    ],
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ],
+    "testMatch": [
+      "<rootDir>/__tests__/**/*.test.js"
+    ]
+  },
+  "devDependencies": {
+    "jest": "~30.5.2",
+    "jest-expo": "~58.0.15"
   },
   "private": true
 }
