@@ -2,17 +2,17 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { partners, partnerCategories } from '../data/partners';
-import { findPlace, nearestLiftStation } from '../utils/places';
+import { partnerCategories } from '../data/partners';
+import { useResort } from '../context/ResortContext';
 import { formatDistance } from '../utils/geo';
 import { styles, colors } from '../styles/styles';
 
 // Hvor ligger partneren? Har partneren et rigtigt sted i appens data, regner
 // vi afstanden til nærmeste lift ud - ellers bruger vi partnerens egen tekst.
-function partnerLocation(partner) {
-  const place = partner.placeId ? findPlace(partner.placeId) : null;
+function partnerLocation(model, partner) {
+  const place = partner.placeId ? model.findPlace(partner.placeId) : null;
   if (!place) return partner.location || '';
-  const nearest = nearestLiftStation(place);
+  const nearest = model.nearestLiftStation(place);
   return `${formatDistance(nearest.meters)} from ${nearest.lift.name} lift`;
 }
 
@@ -22,7 +22,12 @@ function partnerLocation(partner) {
 // findes som sted i appen, har en "View place"-knap til detaljesiden.
 //
 // route.params.category (fra Explore) vælger en kategori på forhånd.
+//
+// Eksempel-partnerne findes kun for Verbier. I andre skiområder siger fanen
+// det, i stedet for at opdigte tilbud hos rigtige virksomheder.
 export default function PartnersScreen({ navigation, route }) {
+  const { resort, model } = useResort();
+  const { partners } = model;
   const [activeCategory, setActiveCategory] = useState('all');
 
   const requested = route.params?.category;
@@ -42,7 +47,7 @@ export default function PartnersScreen({ navigation, route }) {
   };
 
   const renderPartner = ({ item }) => {
-    const place = item.placeId ? findPlace(item.placeId) : null;
+    const place = item.placeId ? model.findPlace(item.placeId) : null;
     return (
       <View style={styles.partnerCard}>
         <View style={styles.partnerTop}>
@@ -62,7 +67,7 @@ export default function PartnersScreen({ navigation, route }) {
         <Text style={styles.partnerDescription}>{item.description}</Text>
         <View style={styles.partnerLocationRow}>
           <Ionicons name="location-outline" size={14} color={colors.textMuted} />
-          <Text style={styles.partnerLocation}>{partnerLocation(item)}</Text>
+          <Text style={styles.partnerLocation}>{partnerLocation(model, item)}</Text>
         </View>
         <View style={styles.partnerActions}>
           <TouchableOpacity
@@ -87,6 +92,32 @@ export default function PartnersScreen({ navigation, route }) {
   };
 
   const chips = [{ id: 'all', name: 'All', icon: 'apps-outline' }, ...partnerCategories];
+
+  if (partners.length === 0) {
+    return (
+      <SafeAreaView style={styles.tabScreen} edges={['top']}>
+        <View style={styles.screenHeader}>
+          <Text style={styles.screenTitle} accessibilityRole="header">
+            Partners
+          </Text>
+        </View>
+        <View style={styles.emptyState}>
+          <Ionicons name="pricetags-outline" size={40} color={colors.textMuted} />
+          <Text style={styles.emptyTitle}>No offers in {resort.name}</Text>
+          <Text style={styles.emptyText}>
+            The example partner offers in this demo are only set up for Verbier.
+          </Text>
+          <TouchableOpacity
+            style={[styles.buttonSecondary, { marginTop: 20 }]}
+            onPress={() => navigation.navigate('Resorts')}
+            accessibilityRole="button"
+          >
+            <Text style={styles.buttonSecondaryText}>Change resort</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.tabScreen} edges={['top']}>

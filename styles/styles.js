@@ -416,9 +416,31 @@ export const styles = StyleSheet.create({
     ...cardShadow,
   },
   heroTitle: {
+    flexShrink: 1,
     fontSize: 28,
     fontWeight: '800',
     color: colors.white,
+  },
+  // Områdets navn er en knap, der åbner resort-vælgeren.
+  heroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroChange: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 36,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    marginLeft: 12,
+  },
+  heroChangeText: {
+    color: colors.white,
+    fontSize: 13,
+    fontWeight: '700',
+    marginLeft: 6,
   },
   heroSubtitle: {
     fontSize: 13,

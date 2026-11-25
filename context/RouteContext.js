@@ -1,9 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { lifts, pistes } from '../data/verbierMap';
-import { elevations } from '../data/elevations';
-import { buildGraph } from '../utils/routing';
-
 // Den aktive rute, som RouteScreen har beregnet, og som MapScreen tegner.
 // Ligger i en context, fordi ruten skal overleve skiftet fra rute-skærmen
 // (i stack'en) til kort-fanen.
@@ -18,14 +14,6 @@ import { buildGraph } from '../utils/routing';
 const RouteContext = createContext(null);
 const SKILL_KEY = 'skimaps.skill';
 const SKILLS = ['none', 'easy', 'intermediate', 'advanced', 'freeride'];
-
-// Grafen over lifter og pister bygges første gang, nogen beder om en rute
-// (tager omkring 20 ms), og genbruges derefter.
-let cachedGraph = null;
-export function getSkiGraph() {
-  if (!cachedGraph) cachedGraph = buildGraph({ lifts, pistes, elevations });
-  return cachedGraph;
-}
 
 export function RouteProvider({ children }) {
   const [activeRoute, setActiveRoute] = useState(null);

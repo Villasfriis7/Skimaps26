@@ -1,9 +1,7 @@
-// Rigtig vejr-/snedata for Verbier via Open-Meteo (gratis, ingen API-nøgle,
-// ikke-kommerciel brug - fint til dette skoleprojekt). Koordinaterne er
-// Verbier bys egne (ca. 1.500 m), ikke brugerens telefon-placering. Open-Meteo
-// kræver kildeangivelse (CC BY 4.0) - den vises på WeatherDetailScreen.
-const VERBIER_LAT = 46.0961;
-const VERBIER_LON = 7.2286;
+// Rigtig vejr-/snedata via Open-Meteo (gratis, ingen API-nøgle,
+// ikke-kommerciel brug - fint til dette skoleprojekt). Vejret hentes for
+// skiområdets landsby (`resort.weatherPoint`), ikke brugerens telefon-placering.
+// Open-Meteo kræver kildeangivelse (CC BY 4.0) - den vises på WeatherDetailScreen.
 const FETCH_TIMEOUT_MS = 10000;
 
 // WMO weather-koder (bruges af Open-Meteo) oversat til ikon (Ionicons) + tekst.
@@ -43,9 +41,9 @@ export function formatUpdated(fetchedAt) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-export async function fetchVerbierWeather() {
+export async function fetchWeather(point) {
   const url =
-    `https://api.open-meteo.com/v1/forecast?latitude=${VERBIER_LAT}&longitude=${VERBIER_LON}` +
+    `https://api.open-meteo.com/v1/forecast?latitude=${point.latitude}&longitude=${point.longitude}` +
     `&current=temperature_2m,weather_code,wind_speed_10m,snowfall,relative_humidity_2m,snow_depth,is_day` +
     `&daily=weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum,precipitation_probability_max` +
     `&timezone=auto&forecast_days=6`;
@@ -92,5 +90,11 @@ export async function fetchVerbierWeather() {
     precipProbability: data.daily.precipitation_probability_max[i],
   }));
 
-  return { current, daily, fetchedAt: Date.now() };
+  // `elevation` er højden på det punkt, vejrmodellen har regnet for.
+  return {
+    current,
+    daily,
+    elevation: Number.isFinite(data.elevation) ? Math.round(data.elevation) : null,
+    fetchedAt: Date.now(),
+  };
 }

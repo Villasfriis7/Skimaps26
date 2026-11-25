@@ -4,7 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
 import { useRoute } from '../context/RouteContext';
+import { useResort } from '../context/ResortContext';
 import { skillLevels } from '../utils/routing';
+import { skillLabel } from '../utils/pistes';
 import { styles, colors } from '../styles/styles';
 
 // Profile-fanen - demo-profil, da der ikke er login/brugerdata-backend endnu,
@@ -35,6 +37,7 @@ const initialsOf = (name) =>
 export default function ProfileScreen({ navigation }) {
   const { savedPlaces } = useSavedPlaces();
   const { skill, setSkill } = useRoute();
+  const { resort, model } = useResort();
 
   return (
     <SafeAreaView style={styles.tabScreen} edges={['top']}>
@@ -63,6 +66,23 @@ export default function ProfileScreen({ navigation }) {
         </View>
 
         <View style={styles.group}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => navigation.navigate('Resorts')}
+            accessibilityRole="button"
+          >
+            <View style={styles.rowTile}>
+              <Ionicons name="location" size={20} color={colors.primary} />
+            </View>
+            <View style={styles.rowTextWrap}>
+              <Text style={styles.rowTitle}>Resort</Text>
+            </View>
+            <Text style={styles.rowValue} numberOfLines={1}>
+              {resort.name}
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={styles.rowChevron} />
+          </TouchableOpacity>
+          <View style={styles.rowDivider} />
           <TouchableOpacity
             style={styles.row}
             onPress={() => navigation.navigate('SavedPlaces')}
@@ -95,7 +115,7 @@ export default function ProfileScreen({ navigation }) {
                   accessibilityState={{ selected: on }}
                 >
                   <Text style={[styles.chipText, { marginLeft: 0 }, on && styles.chipTextActive]}>
-                    {level.label}
+                    {skillLabel(level.id, model.convention)}
                   </Text>
                 </TouchableOpacity>
               );

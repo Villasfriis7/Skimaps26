@@ -13,39 +13,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { pois } from '../data/pois';
-import { partners } from '../data/partners';
-import { lifts, pistes } from '../data/verbierMap';
 import { categoryMeta } from '../data/categoryMeta';
-import { fetchVerbierWeather, weatherCodeMeta } from '../data/weather';
+import { fetchWeather, weatherCodeMeta } from '../data/weather';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
-import { allPlaces, findPlace, placeCategory, nearestLiftStation } from '../utils/places';
-import { pisteGroups } from '../utils/pisteGroups';
-import { pisteKind } from '../utils/pistes';
+import { useResort } from '../context/ResortContext';
+import { placeCategory } from '../utils/places';
 import { search } from '../utils/search';
-import { formatDistance, lineLengthMeters } from '../utils/geo';
+import { formatDistance } from '../utils/geo';
 import { styles, colors } from '../styles/styles';
 
 // Vejret hentes igen, når man vender tilbage til fanen eller appen, men
 // højst hvert 10. minut - Open-Meteo opdaterer ikke oftere, og vi vil ikke
 // spamme API'et.
 const WEATHER_MAX_AGE_MS = 10 * 60 * 1000;
-
-const pisteKm = Math.round(
-  pistes
-    .filter((piste) => pisteKind(piste) === 'downhill' && piste.difficulty !== 'freeride')
-    .reduce((sum, piste) => sum + lineLengthMeters(piste.coordinates), 0) / 1000
-);
-
-const sledRun = pisteGroups
-  .filter((group) => group.kind === 'sled')
-  .sort((a, b) => b.meters - a.meters)[0];
-
-// "350 m from Médran 2 lift" - beregnet, ikke skrevet i hånden.
-function nearLiftText(place) {
-  const nearest = nearestLiftStation(place);
-  return nearest ? `${formatDistance(nearest.meters)} from ${nearest.lift.name} lift` : '';
-}
 
 const resultIcon = (result) =>
   result.kind === 'lift'
@@ -64,29 +44,30 @@ const categoryLabel = {
   lifts: 'lifts',
 };
 
-// Explore er appens startfane - overblik over skiområdet, rigtigt vejr
-// (Open-Meteo), søgning og genveje. Søgningen dækker steder, lifter og pister
-// (utils/search.js).
+// Explore er appens startfane - overblik over det valgte skiområde, rigtigt
+// vejr (Open-Meteo), søgning og genveje. Søgningen dækker steder, lifter og
+// pister (utils/search.js). Øverst skifter man skiområde.
 export default function ExploreScreen({ navigation }) {
+  const { resort, model } = useResort();
   const [query, setQuery] = useState('');
   const [weather, setWeather] = useState(null);
   const [weatherError, setWeatherError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const searchInput = useRef(null);
   const loadingWeather = useRef(false);
-  const { savedPlaces } = useSavedPlaces();
+  const { savedPlaces, isSaved } = useSavedPlaces();
 
   const loadWeather = useCallback(() => {
     if (loadingWeather.current) return Promise.resolve();
     loadingWeather.current = true;
     setWeatherError(false);
-    return fetchVerbierWeather()
+    return fetchWeather(model.weatherPoint)
       .then(setWeather)
       .catch(() => setWeatherError(true))
       .finally(() => {
         loadingWeather.current = false;
       });
-  }, []);
+  }, [model]);
 
   const refreshIfStale = useCallback(() => {
     const fresh = weather && Date.now() - weather.fetchedAt < WEATHER_MAX_AGE_MS;
@@ -111,7 +92,13 @@ export default function ExploreScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const found = useMemo(() => search(query), [query]);
+  const found = useMemo(() => search(model, query), [model, query]);
+
+  // "350 m from Médran 2 lift" - beregnet, ikke skrevet i hånden.
+  const nearLiftText = (place) => {
+    const nearest = model.nearestLiftStation(place);
+    return nearest ? `${formatDistance(nearest.meters)} from ${nearest.lift.name} lift` : '';
+  };
 
   // focusKey er ny ved hvert tryk, så kortet reagerer, selvom man vælger den
   // samme genvej to gange i træk.
@@ -135,9 +122,12 @@ export default function ExploreScreen({ navigation }) {
   const tiles = [
     { label: 'Restaurants', icon: 'restaurant-outline', onPress: () => openCategory('restaurant') },
     { label: 'Après-ski', icon: 'wine-outline', onPress: () => openCategory('apres_ski') },
-    { label: 'Toilets', icon: 'water-outline', onPress: () => openCategory('toilets') },
-    sledRun
-      ? { label: 'Sled run', icon: 'trending-down-outline', onPress: () => openMap({ focusPisteId: sledRun.id }) }
+    // Ikke alle skiområder har toiletter i OpenStreetMap.
+    model.toilets.length > 0
+      ? { label: 'Toilets', icon: 'water-outline', onPress: () => openCategory('toilets') }
+      : { label: 'Hotels', icon: 'bed-outline', onPress: () => openCategory('hotel') },
+    model.sledRun
+      ? { label: 'Sled run', icon: 'trending-down-outline', onPress: () => openMap({ focusPisteId: model.sledRun.id }) }
       : { label: 'Cafés', icon: 'cafe-outline', onPress: () => openCategory('cafe') },
   ];
 
@@ -162,11 +152,26 @@ export default function ExploreScreen({ navigation }) {
         {/* Mens man søger, skjules vejr-kortet, så resultaterne får pladsen. */}
         {!found && (
           <View style={styles.hero}>
-            <Text style={styles.heroTitle} accessibilityRole="header">
-              Verbier
-            </Text>
+            {/* Navnet er en knap: her skifter man skiområde. */}
+            <TouchableOpacity
+              style={styles.heroTitleRow}
+              onPress={() => navigation.navigate('Resorts')}
+              accessibilityRole="button"
+              accessibilityLabel={`${resort.name}. Change resort`}
+            >
+              <Text style={styles.heroTitle} numberOfLines={2}>
+                {resort.name}
+              </Text>
+              <View style={styles.heroChange}>
+                <Ionicons name="swap-horizontal" size={16} color={colors.white} />
+                <Text style={styles.heroChangeText} maxFontSizeMultiplier={1.3}>
+                  Change
+                </Text>
+              </View>
+            </TouchableOpacity>
             <Text style={styles.heroSubtitle}>
-              Switzerland · {lifts.length} lifts · {pisteKm} km of pistes · {allPlaces.length} places
+              {resort.country ? `${resort.country} · ` : ''}
+              {model.lifts.length} lifts · {model.pisteKm} km of pistes · {model.allPlaces.length} places
             </Text>
             <TouchableOpacity
               style={styles.heroWeather}
@@ -233,7 +238,7 @@ export default function ExploreScreen({ navigation }) {
                 <Text style={styles.emptyTitle}>Nothing called "{query.trim()}"</Text>
                 <Text style={styles.emptyText}>
                   SkiMaps knows the restaurants, cafés, bars, hotels, ski rentals, lifts and pistes
-                  around Verbier. Try a name or a word like "pizza" or "hotel".
+                  around {resort.name}. Try a name or a word like "pizza" or "hotel".
                 </Text>
               </View>
             ) : (
@@ -280,6 +285,10 @@ export default function ExploreScreen({ navigation }) {
                         <Text style={styles.rowTitle}>{result.title}</Text>
                         <Text style={styles.rowSubtitle}>{result.subtitle}</Text>
                       </View>
+                      {/* Gemte steder er markeret med et hjerte. */}
+                      {result.kind === 'place' && isSaved(result.id) ? (
+                        <Ionicons name="heart" size={18} color={colors.saved} />
+                      ) : null}
                       <Ionicons
                         name={result.kind === 'place' ? 'chevron-forward' : 'map-outline'}
                         size={18}
@@ -334,9 +343,9 @@ export default function ExploreScreen({ navigation }) {
               </TouchableOpacity>
             ) : null}
 
-            <View style={styles.sectionHeaderRow}>
+            <View style={[styles.sectionHeaderRow, model.featured.length === 0 && { display: 'none' }]}>
               <Text style={styles.sectionTitle} accessibilityRole="header">
-                Featured in Verbier
+                {model.curated ? `Featured in ${resort.name}` : `Places to eat in ${resort.name}`}
               </Text>
             </View>
             <ScrollView
@@ -345,8 +354,8 @@ export default function ExploreScreen({ navigation }) {
               style={styles.hScroll}
               contentContainerStyle={styles.hScrollContent}
             >
-              {pois.map((poi) => {
-                const meta = categoryMeta[poi.category];
+              {model.featured.map((poi) => {
+                const meta = categoryMeta[placeCategory(poi)] || categoryMeta.restaurant;
                 return (
                   <TouchableOpacity
                     key={poi.id}
@@ -371,6 +380,8 @@ export default function ExploreScreen({ navigation }) {
               })}
             </ScrollView>
 
+            {model.partners.length > 0 ? (
+              <>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle} accessibilityRole="header">
                 Example partner offers
@@ -389,8 +400,8 @@ export default function ExploreScreen({ navigation }) {
               style={styles.hScroll}
               contentContainerStyle={styles.hScrollContent}
             >
-              {partners.map((partner) => {
-                const place = partner.placeId ? findPlace(partner.placeId) : null;
+              {model.partners.map((partner) => {
+                const place = partner.placeId ? model.findPlace(partner.placeId) : null;
                 return (
                   <TouchableOpacity
                     key={partner.id}
@@ -424,6 +435,8 @@ export default function ExploreScreen({ navigation }) {
                 );
               })}
             </ScrollView>
+              </>
+            ) : null}
           </>
         )}
       </ScrollView>

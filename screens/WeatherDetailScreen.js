@@ -3,6 +3,7 @@ import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'rea
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { weatherCodeMeta, formatCm, formatUpdated } from '../data/weather';
+import { useResort } from '../context/ResortContext';
 import { openLink } from '../utils/links';
 import { styles, colors } from '../styles/styles';
 
@@ -16,11 +17,12 @@ function weekdayOf(isoDate) {
   return dayNames[new Date(year, month - 1, day).getDay()];
 }
 
-// Detaljeret vejrudsigt for Verbier - modtager allerede hentet vejrdata via
+// Detaljeret vejrudsigt for skiområdets landsby - modtager allerede hentet vejrdata via
 // route.params fra ExploreScreen (samme Open-Meteo-kald genbruges, så vi ikke
 // henter data to gange).
 export default function WeatherDetailScreen({ route }) {
   const { weather } = route.params;
+  const { resort } = useResort();
 
   if (!weather) {
     return (
@@ -47,7 +49,8 @@ export default function WeatherDetailScreen({ route }) {
           {currentMeta.label} · {current.snowConditions}
         </Text>
         <Text style={styles.heroSubtitle}>
-          Verbier village (1,500 m) · updated {formatUpdated(weather.fetchedAt)}
+          {resort.name} village{weather.elevation ? ` (${weather.elevation.toLocaleString('en-US')} m)` : ''} ·
+          updated {formatUpdated(weather.fetchedAt)}
         </Text>
       </View>
 

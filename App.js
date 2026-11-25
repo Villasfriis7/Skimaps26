@@ -16,6 +16,8 @@ import WeatherDetailScreen from './screens/WeatherDetailScreen';
 import SavedPlacesScreen from './screens/SavedPlacesScreen';
 import RouteScreen from './screens/RouteScreen';
 import PlacesListScreen from './screens/PlacesListScreen';
+import ResortPickerScreen from './screens/ResortPickerScreen';
+import { ResortProvider, useResort } from './context/ResortContext';
 import { categoryMeta } from './data/categoryMeta';
 import { SavedPlacesProvider } from './context/SavedPlacesContext';
 import { LocationProvider } from './context/LocationContext';
@@ -80,56 +82,61 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SavedPlacesProvider>
-        <LocationProvider>
-          <RouteProvider>
-            <NavigationContainer>
-              <StatusBar style="dark" />
-              <RootStack.Navigator
-                screenOptions={{
-                  headerStyle: { backgroundColor: colors.ice },
-                  headerTintColor: colors.primary,
-                  headerTitleStyle: { fontWeight: '700', color: colors.textDark },
-                  headerShadowVisible: false,
-                  headerBackButtonDisplayMode: 'minimal',
-                  contentStyle: { backgroundColor: colors.ice },
-                }}
-              >
-                <RootStack.Screen
-                  name="MainTabs"
-                  component={MainTabs}
-                  options={{ headerShown: false }}
-                />
-                <RootStack.Screen
-                  name="POIDetail"
-                  component={POIDetailScreen}
-                  // Navnet står stort på selve siden - ikke også i topbjælken,
-                  // hvor lange navne blev skåret af.
-                  options={{ title: '' }}
-                />
-                <RootStack.Screen
-                  name="WeatherDetail"
-                  component={WeatherDetailScreen}
-                  options={{ title: 'Weather' }}
-                />
-                <RootStack.Screen
-                  name="SavedPlaces"
-                  component={SavedPlacesScreen}
-                  options={{ title: 'Saved places' }}
-                />
-                <RootStack.Screen name="Route" component={RouteScreen} options={{ title: 'Route' }} />
-                <RootStack.Screen
-                  name="Places"
-                  component={PlacesListScreen}
-                  options={({ route }) => ({
-                    title: categoryMeta[route.params.category]?.label || 'Places',
-                  })}
-                />
-              </RootStack.Navigator>
-            </NavigationContainer>
-          </RouteProvider>
-        </LocationProvider>
-      </SavedPlacesProvider>
+      <ResortProvider>
+        <SavedPlacesProvider>
+          <LocationProvider>
+            <Navigation />
+          </LocationProvider>
+        </SavedPlacesProvider>
+      </ResortProvider>
     </SafeAreaProvider>
+  );
+}
+
+// Navigationen bygges forfra, når brugeren skifter skiområde (`key`): så
+// lander man på Explore i det nye område, og kort, søgning og en evt. aktiv
+// rute fra det gamle område er væk.
+function Navigation() {
+  const { resort, ready } = useResort();
+  // Vent, til vi ved, hvilket skiområde appen sidst stod i - ellers ville
+  // Verbier blinke frem et øjeblik ved hver opstart.
+  if (!ready) return null;
+
+  return (
+    <RouteProvider key={resort.id}>
+      <NavigationContainer key={resort.id}>
+        <StatusBar style="dark" />
+        <RootStack.Navigator
+          screenOptions={{
+            headerStyle: { backgroundColor: colors.ice },
+            headerTintColor: colors.primary,
+            headerTitleStyle: { fontWeight: '700', color: colors.textDark },
+            headerShadowVisible: false,
+            headerBackButtonDisplayMode: 'minimal',
+            contentStyle: { backgroundColor: colors.ice },
+          }}
+        >
+          <RootStack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+          <RootStack.Screen
+            name="POIDetail"
+            component={POIDetailScreen}
+            // Navnet står stort på selve siden - ikke også i topbjælken,
+            // hvor lange navne blev skåret af.
+            options={{ title: '' }}
+          />
+          <RootStack.Screen name="WeatherDetail" component={WeatherDetailScreen} options={{ title: 'Weather' }} />
+          <RootStack.Screen name="SavedPlaces" component={SavedPlacesScreen} options={{ title: 'Saved places' }} />
+          <RootStack.Screen name="Route" component={RouteScreen} options={{ title: 'Route' }} />
+          <RootStack.Screen
+            name="Places"
+            component={PlacesListScreen}
+            options={({ route }) => ({
+              title: categoryMeta[route.params.category]?.label || 'Places',
+            })}
+          />
+          <RootStack.Screen name="Resorts" component={ResortPickerScreen} options={{ title: 'Choose resort' }} />
+        </RootStack.Navigator>
+      </NavigationContainer>
+    </RouteProvider>
   );
 }

@@ -6,8 +6,8 @@ import { styles, colors } from '../styles/styles';
 import { categoryMeta } from '../data/categoryMeta';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
 import { useLocation } from '../context/LocationContext';
-import { getSkiGraph } from '../context/RouteContext';
-import { placeCategory, nearestLiftStation, formatCuisine, findPlace } from '../utils/places';
+import { useResort } from '../context/ResortContext';
+import { placeCategory, formatCuisine } from '../utils/places';
 import { liftTypeLabels } from '../utils/pistes';
 import { defaultStart, easiestWay, reachText } from '../utils/reach';
 import { distanceMeters, formatDistance } from '../utils/geo';
@@ -44,27 +44,27 @@ export default function POIDetailScreen({ navigation, route }) {
   const meta = categoryMeta[placeCategory(poi)] || categoryMeta.restaurant;
   const { isSaved, toggleSave } = useSavedPlaces();
   const { location } = useLocation();
+  const { resort, model } = useResort();
   const saved = isSaved(poi.id);
 
-  const nearest = nearestLiftStation(poi);
-  const open = isOpenNow(poi.openingHours); // true / false / null (ukendt)
+  const nearest = model.nearestLiftStation(poi);
+  const open = isOpenNow(poi.openingHours, model.timeZone); // true / false / null (ukendt)
   const cuisine = formatCuisine(poi.cuisine);
   const phone = phoneUrl(poi.phone);
   const website = websiteUrl(poi.website);
   // "Show on map" kræver, at stedet stadig findes i appens data.
-  const onMap = findPlace(poi.id) !== null;
+  const onMap = model.findPlace(poi.id) !== null;
 
   // Hvor svært er det at komme derhen? Regnes fra brugerens position, hvis
-  // den ligger i skiområdet - ellers fra Médran.
-  const graph = getSkiGraph();
-  const start = defaultStart(graph, location);
+  // den ligger i skiområdet - ellers fra områdets hovedlift.
+  const start = defaultStart(model, location);
   const way = useMemo(
-    () => easiestWay(graph, start.point, poi),
+    () => easiestWay(model, start.point, poi),
     // start.point er et nyt objekt ved hver rendering - sammenlign på tallene.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [graph, start.point.latitude, start.point.longitude, poi]
+    [model, start.point.latitude, start.point.longitude, poi]
   );
-  const reach = reachText(way, start.label);
+  const reach = reachText(way, start.label, model.convention);
   const away =
     location && distanceMeters(location, poi) < 30000
       ? `${formatDistance(distanceMeters(location, poi))} from you`
@@ -77,7 +77,7 @@ export default function POIDetailScreen({ navigation, route }) {
     });
 
   const share = () =>
-    Share.share({ message: `${poi.name} (${meta.singular.toLowerCase()} in Verbier)\n${mapsLink(poi)}` }).catch(
+    Share.share({ message: `${poi.name} (${meta.singular.toLowerCase()} in ${resort.name})\n${mapsLink(poi)}` }).catch(
       () => {}
     );
 

@@ -4,10 +4,12 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { categoryMeta } from '../data/categoryMeta';
 import { useLocation } from '../context/LocationContext';
-import { getSkiGraph } from '../context/RouteContext';
-import { allPlaces, placeCategory } from '../utils/places';
+import { useResort } from '../context/ResortContext';
+import { useSavedPlaces } from '../context/SavedPlacesContext';
+import { placeCategory } from '../utils/places';
 import { findRoute } from '../utils/routing';
 import { defaultStart } from '../utils/reach';
+import { skillLabel } from '../utils/pistes';
 import { distanceMeters, formatDistance } from '../utils/geo';
 import { isOpenNow } from '../utils/openingHours';
 import { styles, colors } from '../styles/styles';
@@ -21,7 +23,8 @@ import { styles, colors } from '../styles/styles';
 const reachFilters = [
   { id: 'all', label: 'All', icon: 'apps-outline' },
   { id: 'none', label: 'Without skis', icon: 'walk-outline' },
-  { id: 'easy', label: 'Blue pistes', icon: 'trending-down-outline' },
+  // Teksten sættes ud fra landets pistefarver: "Blue pistes" / "Green pistes".
+  { id: 'easy', label: null, icon: 'trending-down-outline' },
 ];
 
 export default function PlacesListScreen({ navigation, route }) {
@@ -29,8 +32,12 @@ export default function PlacesListScreen({ navigation, route }) {
   const meta = categoryMeta[category];
   const { location } = useLocation();
   const [reach, setReach] = useState('all');
-  const graph = getSkiGraph();
-  const start = defaultStart(graph, location);
+  const { model } = useResort();
+  const { isSaved } = useSavedPlaces();
+  const { allPlaces } = model;
+  const graph = model.getGraph();
+  const easyColor = skillLabel('easy', model.convention);
+  const start = defaultStart(model, location);
 
   // Afstande måles fra brugeren, når vi ved, hvor de er - ellers fra Médran.
   const nearby = location && distanceMeters(location, start.point) < 30000;
@@ -41,17 +48,21 @@ export default function PlacesListScreen({ navigation, route }) {
     () =>
       allPlaces
         .filter((place) => placeCategory(place) === category)
-        .map((place) => ({ place, meters: distanceMeters(origin, place), open: isOpenNow(place.openingHours) }))
+        .map((place) => ({
+          place,
+          meters: distanceMeters(origin, place),
+          open: isOpenNow(place.openingHours, model.timeZone),
+        }))
         .sort((a, b) => a.meters - b.meters),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [category, origin.latitude, origin.longitude]
+    [allPlaces, category, origin.latitude, origin.longitude]
   );
 
   const shown = useMemo(
     () =>
       reach === 'all'
         ? places
-        : places.filter(({ place }) => findRoute(graph, start.point, place, { skill: reach }) !== null),
+        : places.filter(({ place }) => findRoute(graph, start.point, place, { skill: reach, convention: model.convention }) !== null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [places, reach, graph, start.point.latitude, start.point.longitude]
   );
@@ -76,7 +87,9 @@ export default function PlacesListScreen({ navigation, route }) {
               accessibilityState={{ selected: on }}
             >
               <Ionicons name={filter.icon} size={16} color={on ? colors.white : colors.textDark} />
-              <Text style={[styles.chipText, on && styles.chipTextActive]}>{filter.label}</Text>
+              <Text style={[styles.chipText, on && styles.chipTextActive]}>
+                {filter.label || `${easyColor} pistes`}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -85,7 +98,7 @@ export default function PlacesListScreen({ navigation, route }) {
         {shown.length} {shown.length === 1 ? meta.singular.toLowerCase() : meta.label.toLowerCase()} · nearest to{' '}
         {originLabel} first
         {reach === 'none' ? ` · reachable from ${start.label} on foot and by gondola` : ''}
-        {reach === 'easy' ? ` · reachable from ${start.label} on blue pistes or easier` : ''}
+        {reach === 'easy' ? ` · reachable from ${start.label} on ${easyColor.toLowerCase()} pistes or easier` : ''}
       </Text>
     </View>
   );
@@ -118,6 +131,8 @@ export default function PlacesListScreen({ navigation, route }) {
             ) : null}
           </Text>
         </View>
+        {/* Gemte steder er markeret med et hjerte. */}
+        {isSaved(place.id) ? <Ionicons name="heart" size={18} color={colors.saved} /> : null}
         <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={styles.rowChevron} />
       </TouchableOpacity>
     );
@@ -139,9 +154,13 @@ export default function PlacesListScreen({ navigation, route }) {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name={meta.icon} size={40} color={colors.textMuted} />
-            <Text style={styles.emptyTitle}>Nothing within reach</Text>
+            <Text style={styles.emptyTitle}>
+              {reach === 'all' ? `No ${meta.label.toLowerCase()} in ${model.name}` : 'Nothing within reach'}
+            </Text>
             <Text style={styles.emptyText}>
-              No {meta.label.toLowerCase()} can be reached from {start.label} this way. Try "All".
+              {reach === 'all'
+                ? 'OpenStreetMap has none listed for this ski area.'
+                : `No ${meta.label.toLowerCase()} can be reached from ${start.label} this way. Try "All".`}
             </Text>
           </View>
         }

@@ -54,9 +54,10 @@ const SNAP_RADIUS_M = 600; // hvor langt fra netværket start/mål må ligge
 // sammen via pister, men man kan gå eller tage skibussen imellem dem.
 const VILLAGE_RADIUS_M = 1500;
 const VILLAGE_MAX_CLIMB_M = 80;
-// Kun stationer nede i byerne. Uden denne grænse foreslog ruten 2 km "gåture"
-// mellem to liftstationer oppe på bjerget, hvor man ikke kan gå i skistøvler.
-const VILLAGE_MAX_ELEVATION_M = 1800;
+// Gå-forbindelserne gælder kun stationer nede i byerne - ellers foreslog ruten
+// 2 km "gåture" mellem to liftstationer oppe på bjerget, hvor man ikke kan gå
+// i skistøvler. Hvad der er "i en by", afgør skiområdet selv via `isVillage`
+// (se utils/resortModel.js).
 
 // Hvilke sværhedsgrader er tilladt for hvert niveau i UI'et.
 export const skillLevels = [
@@ -143,7 +144,7 @@ function nodesNear(graph, point, radius) {
   return found;
 }
 
-export function buildGraph({ lifts, pistes, elevations = {} }) {
+export function buildGraph({ lifts, pistes, elevations = {}, isVillage = () => false }) {
   const graph = { nodes: [], edges: [], grid: new Map(), lineOf: [] };
   const indexByKey = new Map();
 
@@ -171,13 +172,18 @@ export function buildGraph({ lifts, pistes, elevations = {} }) {
 
   for (const piste of pistes) {
     if (pisteKind(piste) !== 'downhill') continue; // skiture og kælkebane er ikke pister
-    const speed = PISTE_SPEED[piste.difficulty];
+    // En rigtig pist uden sværhedsgrad i OpenStreetMap (kun hentede områder
+    // har `type`) kan vi ikke love er let: den regnes som sort i ruterne, men
+    // vises stadig som "Unclassified".
+    const untagged = piste.type === 'downhill' && piste.difficulty === 'unknown';
+    const speed = PISTE_SPEED[untagged ? 'advanced' : piste.difficulty];
     if (!speed) continue;
     const step = {
       kind: 'piste',
       id: piste.id,
       name: cleanPisteName(piste.name),
       difficulty: piste.difficulty,
+      ...(untagged ? { routeAs: 'advanced' } : null),
     };
     // OSM tegner pister i køreretningen. Kun hvis højdedata ikke viser et
     // klart fald (flade forbindelsesstykker), må stykket køres begge veje.
@@ -224,8 +230,8 @@ export function buildGraph({ lifts, pistes, elevations = {} }) {
     terminals.push({ index: bottom, lineId: lift.id });
     terminals.push({ index: top, lineId: lift.id });
     if (startElev !== undefined) {
-      stations.push({ index: bottom, elevation: Math.min(startElev, endElev) });
-      stations.push({ index: top, elevation: Math.max(startElev, endElev) });
+      stations.push({ index: bottom, elevation: Math.min(startElev, endElev), village: isVillage(graph.nodes[bottom]) });
+      stations.push({ index: top, elevation: Math.max(startElev, endElev), village: isVillage(graph.nodes[top]) });
     }
   }
 
@@ -258,7 +264,7 @@ export function buildGraph({ lifts, pistes, elevations = {} }) {
       const from = stations[a];
       const to = stations[b];
       if (from.index === to.index) continue;
-      if (from.elevation > VILLAGE_MAX_ELEVATION_M || to.elevation > VILLAGE_MAX_ELEVATION_M) continue;
+      if (!from.village || !to.village) continue;
       if (Math.abs(from.elevation - to.elevation) > VILLAGE_MAX_CLIMB_M) continue;
       const meters = distanceMeters(graph.nodes[from.index], graph.nodes[to.index]);
       if (meters <= TRANSFER_RADIUS_M || meters > VILLAGE_RADIUS_M) continue;
@@ -286,9 +292,14 @@ export function isOnNetwork(graph, point) {
 // Finder hurtigste rute fra `from` til `to` (begge { latitude, longitude }).
 // Returnerer { steps, totalSeconds, totalMeters } eller null, hvis der ikke
 // findes en rute med de tilladte sværhedsgrader.
-export function findRoute(graph, from, to, { skill = 'intermediate' } = {}) {
+//
+// `convention` er landets pistefarver (se utils/pistes.js). I Nordamerika er
+// "expert" en dobbelt sort diamant - et trin over almindelig sort - så dér
+// hører den til det øverste niveau og ikke til "Black".
+export function findRoute(graph, from, to, { skill = 'intermediate', convention = 'europe' } = {}) {
   const level = skillLevels.find((l) => l.id === skill) || skillLevels[2];
   const allowed = new Set(level.allowed);
+  if (convention === 'north_america' && level.id === 'advanced') allowed.delete('expert');
 
   const starts = snapPoints(graph, from);
   const targets = snapPoints(graph, to);
@@ -314,7 +325,7 @@ export function findRoute(graph, from, to, { skill = 'intermediate' } = {}) {
     const { index, cost } = heap.pop();
     if (cost > dist[index]) continue;
     for (const edge of graph.edges[index]) {
-      if (edge.step.kind === 'piste' && !allowed.has(edge.step.difficulty)) continue;
+      if (edge.step.kind === 'piste' && !allowed.has(edge.step.routeAs || edge.step.difficulty)) continue;
       if (level.cabinsOnly && edge.step.kind === 'lift' && !TWO_WAY_LIFTS.has(edge.step.liftType)) continue;
       const next = cost + edge.cost;
       if (next < dist[edge.to]) {

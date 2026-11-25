@@ -17,17 +17,22 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Polyline, Circle, Marker, UrlTile } from 'react-native-maps';
-import { lifts, pistes, pisteColors, verbierRegion, towns } from '../data/verbierMap';
-import { elevations } from '../data/elevations';
-import { toilets } from '../data/toilets';
-import { friends } from '../data/friends';
 import { categoryMeta } from '../data/categoryMeta';
 import { useLocation } from '../context/LocationContext';
 import { useRoute } from '../context/RouteContext';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
-import { allPlaces, findPlace, placeCategory, nearestLiftStation, liftBottom } from '../utils/places';
-import { pisteKind, pisteLabel, liftTypeLabels } from '../utils/pistes';
-import { pisteGroups, pisteGroupOf, groupCoordinates } from '../utils/pisteGroups';
+import { useResort } from '../context/ResortContext';
+import { placeCategory } from '../utils/places';
+import {
+  pisteKind,
+  pisteLabel,
+  pisteColor,
+  pisteLegend,
+  liftTypeLabels,
+  OFF_PISTE_COLOR,
+  UNKNOWN_PISTE_COLOR,
+} from '../utils/pistes';
+import { groupCoordinates } from '../utils/pisteGroups';
 import { search } from '../utils/search';
 import { isOpenNow } from '../utils/openingHours';
 import {
@@ -58,28 +63,8 @@ const allOff = Object.fromEntries(filterChips.map((chip) => [chip.id, false]));
 // øvrige (hoteller er langt de fleste) slås til manuelt for at holde kortet roligt.
 const defaultActive = { ...allOff, restaurant: true, cafe: true, toilets: true, friends: true };
 
-// Kun rigtige alpine pister tæller med i tallet - datasættet rummer også
-// skitur-ruter og en kælkebane (se utils/pistes.js). Vi viser samlet længde
-// og ikke et antal: OSM deler hver pist op i mange stykker.
-const pisteKm = Math.round(
-  pistes
-    .filter((piste) => pisteKind(piste) === 'downhill' && piste.difficulty !== 'freeride')
-    .reduce((sum, piste) => sum + lineLengthMeters(piste.coordinates), 0) / 1000
-);
-
 const LIFT_COLOR = '#2b3a42';
 const LIFT_COLOR_ON_SATELLITE = '#ffffff'; // mørke lifter forsvinder på et satellitfoto
-
-const legendItems = [
-  { label: 'Lift', color: LIFT_COLOR, lift: true },
-  { label: 'Green · beginner', color: pisteColors.novice },
-  { label: 'Blue · easy', color: pisteColors.easy },
-  { label: 'Red · intermediate', color: pisteColors.intermediate },
-  { label: 'Black · difficult', color: pisteColors.advanced },
-  { label: 'Off-piste route', color: pisteColors.freeride, dashed: true },
-  { label: 'Ski tour (uphill)', color: pisteColors.unknown, dashed: true },
-  { label: 'Sled run', color: colors.sled, dashed: true },
-];
 
 // BAGGRUNDSKORT - et snedækket landskab i hele verden, ikke kun i Verbier.
 //
@@ -144,11 +129,27 @@ function midpointOf(coordinates) {
   };
 }
 
-// Navneskilte til pisterne (kun zoomet helt ind): ét pr. pistenavn, sat midt
-// på det længste stykke. OSM-navne som "Piste de Clambin, Hattey" (to navne
-// på samme stykke) forkortes til det første, og hvert navn vises kun én gang,
-// så skiltene ikke ligger oven i hinanden.
-const pisteLabels = (() => {
+// Det, kortet tegner ud over selve linjerne, regnet ud én gang pr. skiområde:
+// signaturforklaring, navneskilte og liftstationer.
+function mapDataFor(model) {
+  const { lifts, pisteGroups, convention } = model;
+
+  // Signaturforklaringen følger landets pistefarver og viser kun de
+  // linjetyper, området faktisk har.
+  const kinds = new Set(pisteGroups.map((group) => group.kind));
+  const hasOffPiste = pisteGroups.some((group) => group.difficulty === 'freeride');
+  const legendItems = [
+    { label: 'Lift', color: LIFT_COLOR, lift: true },
+    ...pisteLegend(convention),
+    hasOffPiste && { label: 'Off-piste route', color: OFF_PISTE_COLOR, dashed: true },
+    (kinds.has('skitour') || kinds.has('other')) && { label: 'Ski tour (uphill)', color: UNKNOWN_PISTE_COLOR, dashed: true },
+    kinds.has('sled') && { label: 'Sled run', color: colors.sled, dashed: true },
+  ].filter(Boolean);
+
+  // Navneskilte til pisterne (kun zoomet helt ind): ét pr. pistenavn, sat midt
+  // på det længste stykke. OSM-navne som "Piste de Clambin, Hattey" (to navne
+  // på samme stykke) forkortes til det første, og hvert navn vises kun én gang,
+  // så skiltene ikke ligger oven i hinanden.
   const byName = new Map();
   for (const group of pisteGroups) {
     if (!group.name || group.meters < 400 || group.kind === 'skitour' || group.kind === 'other') continue;
@@ -157,34 +158,33 @@ const pisteLabels = (() => {
     const best = byName.get(key);
     if (!best || group.meters > best.group.meters) byName.set(key, { group, label });
   }
-  return [...byName.values()].map(({ group, label }) => {
+  const pisteLabels = [...byName.values()].map(({ group, label }) => {
     const longest = group.pistes.reduce((x, y) => (y.coordinates.length > x.coordinates.length ? y : x));
     return { group, label, coordinate: middleOf(longest.coordinates) };
   });
-})();
 
-// Navneskilte til lifterne. Lifter, der løber side om side (Médran 2 og 4),
-// har samme midtpunkt - de deler ét skilt i stedet for to oven i hinanden.
-const liftLabels = (() => {
-  const labels = [];
+  // Navneskilte til lifterne. Lifter, der løber side om side (Médran 2 og 4),
+  // har samme midtpunkt - de deler ét skilt i stedet for to oven i hinanden.
+  const liftLabels = [];
   for (const lift of lifts) {
     const coordinate = midpointOf(lift.coordinates);
-    const near = labels.find((label) => distanceMeters(label.coordinate, coordinate) < 90);
+    const near = liftLabels.find((label) => distanceMeters(label.coordinate, coordinate) < 90);
     if (near) {
       if (!near.names.includes(lift.name)) near.names.push(lift.name);
       near.main = near.main || MAIN_LIFTS.has(lift.liftType);
     } else {
-      labels.push({ lift, coordinate, names: [lift.name], main: MAIN_LIFTS.has(lift.liftType) });
+      liftLabels.push({ lift, coordinate, names: [lift.name], main: MAIN_LIFTS.has(lift.liftType) });
     }
   }
-  return labels;
-})();
 
-// Alle liftstationer (begge ender af hver lift) - tegnes som små ringe.
-const liftStations = lifts.flatMap((lift) => [
-  { id: `${lift.id}-a`, ...lift.coordinates[0] },
-  { id: `${lift.id}-b`, ...lift.coordinates[lift.coordinates.length - 1] },
-]);
+  // Alle liftstationer (begge ender af hver lift) - tegnes som små ringe.
+  const liftStations = lifts.flatMap((lift) => [
+    { id: `${lift.id}-a`, ...lift.coordinates[0] },
+    { id: `${lift.id}-b`, ...lift.coordinates[lift.coordinates.length - 1] },
+  ]);
+
+  return { legendItems, pisteLabels, liftLabels, liftStations };
+}
 
 const regionAround = (point, delta = 0.012) => ({
   latitude: point.latitude,
@@ -206,38 +206,38 @@ function withAlpha(hex, alpha) {
 }
 const DIMMED = 0.35;
 
-function pisteStyle(piste, level) {
+function pisteStyle(piste, level, convention) {
   const kind = pisteKind(piste);
   const width = PISTE_WIDTH[level];
   if (kind === 'sled') return { color: colors.sled, width: width - 1, dash: [6, 4] };
-  if (kind !== 'downhill') return { color: pisteColors.unknown, width: 1.5, dash: [3, 5] };
+  if (kind !== 'downhill') return { color: UNKNOWN_PISTE_COLOR, width: 1.5, dash: [3, 5] };
   if (piste.difficulty === 'freeride') {
     // Off-piste: tyndere og stiplet, så den ikke ligner en præpareret pist.
-    return { color: pisteColors.freeride, width: width - 1, dash: [7, 6] };
+    return { color: OFF_PISTE_COLOR, width: width - 1, dash: [7, 6] };
   }
-  return { color: pisteColors[piste.difficulty] || pisteColors.unknown, width };
+  return { color: pisteColor(piste.difficulty, convention), width };
 }
 
-function liftSubtitle(lift) {
+function liftSubtitle(model, lift) {
   const type = liftTypeLabels[lift.liftType] || liftTypeLabels.unknown;
   const length = formatDistance(lineLengthMeters(lift.coordinates));
-  const [a, b] = elevations[lift.id] || [];
+  const [a, b] = model.elevations[lift.id] || [];
   const height = a !== undefined && Math.abs(a - b) >= 10 ? ` · ${Math.min(a, b)} → ${Math.max(a, b)} m` : '';
   const ride = Math.max(1, Math.round(lineLengthMeters(lift.coordinates) / (LIFT_SPEED[lift.liftType] || 3) / 60));
   return `${type} · ${length}${height} · about ${ride} min ride`;
 }
 
-function pisteSubtitle(group) {
+function pisteSubtitle(model, group) {
   const drop =
     group.top !== undefined && group.top - group.bottom >= 10 ? ` · ↓ ${group.top - group.bottom} m` : '';
-  return `${pisteLabel(group.pistes[0])} · ${formatDistance(group.meters)}${drop}`;
+  return `${pisteLabel(group.pistes[0], model.convention)} · ${formatDistance(group.meters)}${drop}`;
 }
 
-function placeSubtitle(place) {
+function placeSubtitle(model, place) {
   const parts = [categoryMeta[placeCategory(place)]?.singular];
-  const open = isOpenNow(place.openingHours);
+  const open = isOpenNow(place.openingHours, model.timeZone);
   if (open !== null) parts.push(open ? 'Open now' : 'Closed now');
-  const nearest = nearestLiftStation(place);
+  const nearest = model.nearestLiftStation(place);
   if (nearest) parts.push(`${formatDistance(nearest.meters)} from ${nearest.lift.name} lift`);
   return parts.filter(Boolean).join(' · ');
 }
@@ -311,6 +311,26 @@ function CardButton({ label, icon, primary, onPress }) {
 //   { showRoute }      zoom til den aktive rute fra RouteContext
 export default function MapScreen({ navigation, route }) {
   const insets = useSafeAreaInsets();
+  // Alt om det valgte skiområde. Skifter brugeren område, bygges hele
+  // navigationen forfra (se App.js), så denne skærm starter forfra med det nye.
+  const { resort, model } = useResort();
+  const {
+    lifts,
+    pistes,
+    towns,
+    toilets,
+    friends,
+    allPlaces,
+    findPlace,
+    nearestLiftStation,
+    liftBottom,
+    pisteGroupOf,
+    pisteKm,
+    convention,
+  } = model;
+  const resortRegion = model.region;
+  const { legendItems, pisteLabels, liftLabels, liftStations } = useMemo(() => mapDataFor(model), [model]);
+  const styleOf = useCallback((piste, zoom) => pisteStyle(piste, zoom, convention), [convention]);
   const isFocused = useIsFocused();
   const mapRef = useRef(null);
   const mapReady = useRef(false);
@@ -327,8 +347,8 @@ export default function MapScreen({ navigation, route }) {
   // kind er 'lift' | 'piste' | 'place' | 'friend' | 'toilet'. For 'piste' er
   // item hele pisten (en gruppe af stykker, se utils/pisteGroups.js).
   const [selected, setSelected] = useState(null);
-  const [region, setRegion] = useState(verbierRegion);
-  const [level, setLevel] = useState(() => zoomLevelFor(verbierRegion));
+  const [region, setRegion] = useState(resortRegion);
+  const [level, setLevel] = useState(() => zoomLevelFor(resortRegion));
   const [baseMap, setBaseMap] = useState('terrain'); // 'terrain' | 'satellite'
   const [legendOpen, setLegendOpen] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -338,7 +358,7 @@ export default function MapScreen({ navigation, route }) {
   // Kaldes, når brugeren er færdig med at panorere/zoome. Udsnittet gemmes
   // kun som state, når man er zoomet ind (det bruges til pist-skiltene), så
   // oversigten ikke tegnes om ved hver panorering.
-  const lastRegion = useRef(verbierRegion);
+  const lastRegion = useRef(resortRegion);
   const onRegionChangeComplete = (next) => {
     lastRegion.current = next;
     const nextLevel = zoomLevelFor(next);
@@ -447,7 +467,16 @@ export default function MapScreen({ navigation, route }) {
       // Toiletter er kun relevante tæt på: zoom til brugeren (eller byen).
       // Vælg det nærmeste med det samme, så svaret står i info-kortet.
       setActive({ ...allOff, toilets: true });
-      const here = location && distanceMeters(location, verbierRegion) < 30000 ? location : towns[0];
+      if (toilets.length === 0) {
+        // Området har ingen toiletter i OpenStreetMap - vis bare oversigten.
+        setSelected(null);
+        moveTo(resortRegion);
+        return;
+      }
+      const here =
+        location && distanceMeters(location, resortRegion) < 30000
+          ? location
+          : liftBottom(model.defaultLift);
       const nearestToilet = toilets.reduce((best, wc) =>
         distanceMeters(here, wc) < distanceMeters(here, best) ? wc : best
       );
@@ -457,7 +486,7 @@ export default function MapScreen({ navigation, route }) {
       const only = params.focusCategory === 'lifts' ? {} : { [params.focusCategory]: true };
       setActive({ ...allOff, ...only });
       setSelected(null);
-      moveTo(verbierRegion);
+      moveTo(resortRegion);
     } else if (params.focusLiftId) {
       const lift = lifts.find((l) => l.id === params.focusLiftId);
       if (!lift) return;
@@ -528,11 +557,11 @@ export default function MapScreen({ navigation, route }) {
       );
       return;
     }
-    const meters = distanceMeters(point, verbierRegion);
+    const meters = distanceMeters(point, resortRegion);
     if (meters > 30000) {
       Alert.alert(
-        'You are not in Verbier',
-        `You are about ${formatDistance(meters)} away. The map only has lifts and pistes for the Verbier ski area.`
+        `You are not in ${resort.name}`,
+        `You are about ${formatDistance(meters)} away. The map shows lifts and pistes for ${resort.name} - change resort on Explore if you are skiing somewhere else.`
       );
       return;
     }
@@ -540,7 +569,7 @@ export default function MapScreen({ navigation, route }) {
   };
 
   // --- Søgning direkte på kortet -------------------------------------------
-  const found = useMemo(() => search(query, 20), [query]);
+  const found = useMemo(() => search(model, query, 20), [model, query]);
 
   const closeSearch = () => {
     setQuery('');
@@ -565,7 +594,7 @@ export default function MapScreen({ navigation, route }) {
     closeSearch();
     setSelected(null);
     setActive({ ...allOff, ...(category === 'lifts' ? {} : { [category]: true }) });
-    moveTo(verbierRegion);
+    moveTo(resortRegion);
   };
 
   // --- Linjer ---------------------------------------------------------------
@@ -586,13 +615,20 @@ export default function MapScreen({ navigation, route }) {
           onPress={() => select('lift', lift)}
         />
       )),
-    [level, baseMap, liftColor, lineAlpha, select]
+    [lifts, level, baseMap, liftColor, lineAlpha, select]
   );
 
+  // Skitur-ruter (opstigning på ski) vises ikke i oversigten: i nogle områder
+  // er der så mange, at de drukner selve pisterne. De kommer frem, når man
+  // zoomer ind.
+  const drawnPistes = useMemo(
+    () => (level === 'far' ? pistes.filter((piste) => ['downhill', 'sled'].includes(pisteKind(piste))) : pistes),
+    [pistes, level]
+  );
   const pisteLines = useMemo(
     () =>
-      pistes.map((piste) => {
-        const style = pisteStyle(piste, level);
+      drawnPistes.map((piste) => {
+        const style = styleOf(piste, level);
         return (
           <Polyline
             key={piste.id}
@@ -608,7 +644,7 @@ export default function MapScreen({ navigation, route }) {
           />
         );
       }),
-    [level, lineAlpha, select]
+    [drawnPistes, styleOf, pisteGroupOf, level, lineAlpha, select]
   );
 
   // Sorte pister kan ikke ses på et mørkt satellitfoto, så dér får de en hvid
@@ -662,7 +698,7 @@ export default function MapScreen({ navigation, route }) {
       selected.kind === 'lift'
         ? [{ id: selected.item.id, coordinates: selected.item.coordinates, color: liftColor, width: LIFT_WIDTH[level] + 1.5 }]
         : selected.item.pistes.map((piste) => {
-            const style = pisteStyle(piste, level);
+            const style = styleOf(piste, level);
             return { id: piste.id, coordinates: piste.coordinates, color: style.color, width: style.width + 1 };
           });
     return parts.flatMap((part) => [
@@ -825,7 +861,7 @@ export default function MapScreen({ navigation, route }) {
           onPress={() => select('piste', group)}
         >
           <View style={styles.pisteLabel}>
-            <View style={[styles.pisteLabelDot, { backgroundColor: pisteStyle(group.pistes[0], 'near').color }]} />
+            <View style={[styles.pisteLabelDot, { backgroundColor: styleOf(group.pistes[0], 'near').color }]} />
             <Text style={styles.pisteLabelText} maxFontSizeMultiplier={1.2}>
               {label}
             </Text>
@@ -844,7 +880,7 @@ export default function MapScreen({ navigation, route }) {
     const close = () => setSelected(null);
     if (kind === 'lift') {
       return (
-        <MapCard icon="triangle-outline" title={item.name} subtitle={liftSubtitle(item)} onClose={close}>
+        <MapCard icon="triangle-outline" title={item.name} subtitle={liftSubtitle(model, item)} onClose={close}>
           <CardButton
             primary
             icon="navigate"
@@ -858,9 +894,9 @@ export default function MapScreen({ navigation, route }) {
       return (
         <MapCard
           icon="ellipse"
-          iconColor={pisteStyle(item.pistes[0], 'near').color}
+          iconColor={styleOf(item.pistes[0], 'near').color}
           title={item.name || 'Unnamed piste'}
-          subtitle={pisteSubtitle(item)}
+          subtitle={pisteSubtitle(model, item)}
           onClose={close}
         />
       );
@@ -871,7 +907,7 @@ export default function MapScreen({ navigation, route }) {
         <MapCard
           icon={categoryMeta[placeCategory(item)]?.icon}
           title={item.name}
-          subtitle={placeSubtitle(item)}
+          subtitle={placeSubtitle(model, item)}
           onClose={close}
         >
           <CardButton primary icon="navigate" label="Route" onPress={() => routeTo(item)} />
@@ -938,7 +974,7 @@ export default function MapScreen({ navigation, route }) {
 
   const showWholeArea = () => {
     setLegendOpen(false);
-    moveTo(verbierRegion);
+    moveTo(resortRegion);
   };
 
   return (
@@ -960,7 +996,7 @@ export default function MapScreen({ navigation, route }) {
           showsCompass
           toolbarEnabled={false}
           moveOnMarkerPress={false}
-          minZoomLevel={10}
+          minZoomLevel={9}
           maxZoomLevel={18}
           onMapReady={onMapReady}
           onPress={onMapPress}

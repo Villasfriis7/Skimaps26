@@ -1,8 +1,11 @@
 # Skimaps
 
 Skimaps er en "Google Maps til skisportsområder" - en React Native/Expo-app, der lader
-brugeren finde vej i Verbier skiområde via lifter og pister (ikke veje), finde restauranter,
+brugeren finde vej i et skiområde via lifter og pister (ikke veje), finde restauranter,
 caféer, après-ski, hoteller og ski rental, se venner på kortet og udnytte partner-rabatter.
+
+Appen starter i Verbier, som den er bygget omkring, men man kan skifte til et hvilket som
+helst skiområde i verden (se "Skift af skiområde" nedenfor).
 
 Appens tekster er på engelsk (målgruppen er internationale skigæster); kode-kommentarer
 og denne README er på dansk.
@@ -37,6 +40,30 @@ og denne README er på dansk.
   eksempler - der er ingen rigtige aftaler endnu, og det står også i appen.
 - **Profile** - demo-profil, skiniveau og **gemte steder** (rigtige, se nedenfor).
 
+## Skift af skiområde
+
+Øverst på Explore (og under Profile) vælger man skiområde.
+
+- **Klar i appen:** Verbier plus ti områder, der er hentet på forhånd og lagt ind som filer
+  i `data/resorts/`: Val Thorens-Orelle, Alpe d'Huez, Zermatt-Cervinia, Ischgl/Samnaun,
+  Sölden, Åre, Hemsedal, Trysil, Whistler Blackcomb og Niseko United. De virker med det
+  samme og uden net.
+- **Alle andre:** Søgefeltet finder skiområder i hele verden via OpenSkiMap. Første gang man
+  vælger et, henter appen lifter, pister, steder og toiletter fra OpenStreetMap (Overpass API)
+  og højder fra Open-Meteo - typisk 30-60 sekunder - og gemmer området på telefonen, så det
+  virker uden net bagefter (`utils/resortData.js`, `utils/resortStore.js`).
+
+Pistefarverne følger landet: blå/rød/sort i Europa, grøn/blå/sort i Nordamerika og
+grøn/rød/sort i Japan (`utils/pistes.js`).
+
+Kun Verbier har håndlavet indhold: de fem udvalgte steder og eksempel-partnerne. I andre
+områder viser Explore de bedst beskrevne spisesteder, eksempel-vennerne stilles ved rigtige
+steder i området, og Partners-fanen siger, at tilbuddene kun findes for Verbier.
+
+De gratis servere har grænser: Overpass er til tider overbelastet (så fejler hentningen, og
+man må prøve igen), og Open-Meteo tillader ca. 5.000 højdeopslag i timen pr. forbindelse -
+nok til 5-10 områder. Meget store sammenhængende områder (over 16 km i radius) hentes ikke.
+
 ## Sådan virker rutefindingen
 
 `utils/routing.js` bygger en graf af lift- og pistedataene: hvert punkt på en pist og hver
@@ -47,15 +74,16 @@ ski- og lifthastigheder, og appen ved ikke, om en lift eller pist er åben i dag
 
 ## Rigtige datakilder (ikke hardcoded)
 
-- **Vejr:** Live data fra [Open-Meteo](https://open-meteo.com) for Verbiers koordinater
+- **Vejr:** Live data fra [Open-Meteo](https://open-meteo.com) for skiområdets landsby
   (temperatur, snedybde, snefald, 6-dages udsigt). Hentes, når Explore-fanen åbnes, og
   igen når man vender tilbage til den, hvis tallene er over 10 minutter gamle.
 - **Gemte steder:** Brugeren kan trykke på hjerte-ikonet på et steds detaljeside for at
   gemme det. Gemte steder gemmes lokalt med `AsyncStorage` og huskes, selv efter appen
   lukkes og genåbnes (se `context/SavedPlacesContext.js`).
 - **Position:** Brugerens GPS-position via `expo-location` (se `context/LocationContext.js`).
-- **Kort-/stedsdata:** Lifter, pister, steder og toiletter er hentet fra OpenStreetMap og
-  OpenSkiMap.org's åbne datasæt under research-fasen af projektet. Steder og toiletter er
+- **Kort-/stedsdata:** For Verbier er lifter, pister, steder og toiletter hentet fra
+  OpenStreetMap og OpenSkiMap.org's åbne datasæt under research-fasen af projektet. Andre
+  skiområder hentes af appen selv fra de samme kilder. Steder og toiletter er
   afgrænset til dem, der ligger højst 1 km fra en lift eller pist. Pistedatasættet rummer
   også 14 stykker skitur-rute, 11 stykker kælkebane og 7 linjer uden sværhedsgrad; de
   tegnes med deres egen farve og indgår ikke i rutefindingen.
@@ -93,9 +121,11 @@ Alle krediteres også inde i appen (under kortet, med links ved tryk, og på vej
 ## Mappestruktur
 
 - `screens/` - én fil pr. skærm
-- `context/` - delt tilstand: gemte steder, position og aktiv rute
-- `utils/` - ren logik uden UI: rutefinding, søgning, afstande, åbningstider, links, oprydning i data
-- `data/` - geodata, steder og mock-data
+- `context/` - delt tilstand: valgt skiområde, gemte steder, position og aktiv rute
+- `utils/` - ren logik uden UI: rutefinding, søgning, afstande, åbningstider, links, oprydning
+  i data, hentning og lagring af skiområder. `utils/resortModel.js` samler alt, appen ved om
+  det valgte område
+- `data/` - Verbiers geodata, steder og eksempeldata; `data/resorts/` de indbyggede skiområder
 - `styles/styles.js` - fælles farver og styles; designreglerne står øverst i filen
 
 ## Kom i gang

@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, Switch, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { friends } from '../data/friends';
 import { useLocation } from '../context/LocationContext';
+import { useResort } from '../context/ResortContext';
 import { distanceMeters, formatDistance } from '../utils/geo';
 import { styles, colors } from '../styles/styles';
 
@@ -15,6 +15,8 @@ import { styles, colors } from '../styles/styles';
 // den lader ikke som om, noget bliver sendt.
 export default function FriendsScreen({ navigation }) {
   const { location, locate } = useLocation();
+  const { model } = useResort();
+  const { friends } = model;
   const [sharing, setSharing] = useState(false);
 
   const toggleSharing = async (next) => {

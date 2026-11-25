@@ -1,5 +1,3 @@
-import { pistes } from '../data/verbierMap';
-import { elevations } from '../data/elevations';
 import { distanceMeters, lineLengthMeters } from './geo';
 import { pisteKind, pisteDisplayName, cleanPisteName } from './pistes';
 
@@ -33,7 +31,8 @@ function endNear(a, b) {
 }
 const touches = (a, b) => endNear(a, b) || endNear(b, a);
 
-function buildGroups() {
+// Bygger grupperne for ét skiområde: { groups, groupOf(pisteId) }.
+export function buildPisteGroups(pistes, elevations = {}) {
   // Sortér stykkerne i bunker efter navn + sværhedsgrad ...
   const buckets = new Map();
   const groups = [];
@@ -68,7 +67,7 @@ function buildGroups() {
       groups.push(chain);
     }
   }
-  return groups.map((members) => {
+  const result = groups.map((members) => {
     const heights = members.flatMap((piste) => elevations[piste.id] || []);
     return {
       id: members[0].id,
@@ -81,17 +80,14 @@ function buildGroups() {
       bottom: heights.length ? Math.min(...heights) : undefined,
     };
   });
+
+  const byPisteId = new Map();
+  for (const group of result) {
+    for (const piste of group.pistes) byPisteId.set(piste.id, group);
+  }
+  // groupOf: hele pisten, som et stykke hører til.
+  return { groups: result, groupOf: (pisteId) => byPisteId.get(pisteId) || null };
 }
-
-export const pisteGroups = buildGroups();
-
-const groupByPisteId = new Map();
-for (const group of pisteGroups) {
-  for (const piste of group.pistes) groupByPisteId.set(piste.id, group);
-}
-
-// Hele pisten, som et stykke hører til.
-export const pisteGroupOf = (pisteId) => groupByPisteId.get(pisteId) || null;
 
 // Alle punkter i en gruppe - til at zoome kortet hen til pisten.
 export const groupCoordinates = (group) => group.pistes.flatMap((piste) => piste.coordinates);

@@ -12,7 +12,6 @@
 // og så viser appen bare den rå tekst i stedet for at gætte.
 
 const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
-const RESORT_TIME_ZONE = 'Europe/Zurich';
 
 // "Mo-Th" / "Mo, Sa" / "Mo, Tu, Th-Sa" -> mængde af dagsindeks (Mo = 0).
 function parseDays(text) {
@@ -67,32 +66,35 @@ export function parseOpeningHours(text) {
   return rules.length ? rules : null;
 }
 
-// Ugedag (Mo = 0) og minutter efter midnat i Verbier - ikke på telefonen,
-// så "åben nu" også passer, hvis brugeren sidder i en anden tidszone.
-export function resortTime(now = new Date()) {
-  try {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: RESORT_TIME_ZONE,
-      weekday: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).formatToParts(now);
-    const get = (type) => parts.find((p) => p.type === type)?.value;
-    const day = DAYS.indexOf((get('weekday') || '').slice(0, 2));
-    const minutes = (Number(get('hour')) % 24) * 60 + Number(get('minute'));
-    if (day !== -1 && !Number.isNaN(minutes)) return { day, minutes };
-  } catch {
-    // Intl med tidszone findes ikke på alle enheder - brug telefonens tid.
+// Ugedag (Mo = 0) og minutter efter midnat i skiområdets tidszone - ikke på
+// telefonen, så "åben nu" også passer, hvis brugeren sidder et andet sted.
+// Kender vi ikke områdets tidszone, bruges telefonens egen tid.
+export function resortTime(now = new Date(), timeZone = null) {
+  if (timeZone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).formatToParts(now);
+      const get = (type) => parts.find((p) => p.type === type)?.value;
+      const day = DAYS.indexOf((get('weekday') || '').slice(0, 2));
+      const minutes = (Number(get('hour')) % 24) * 60 + Number(get('minute'));
+      if (day !== -1 && !Number.isNaN(minutes)) return { day, minutes };
+    } catch {
+      // Intl med tidszone findes ikke på alle enheder - brug telefonens tid.
+    }
   }
   return { day: (now.getDay() + 6) % 7, minutes: now.getHours() * 60 + now.getMinutes() };
 }
 
 // true = åben nu, false = lukket nu, null = ved ikke (kan ikke læse formatet).
-export function isOpenNow(text, now = new Date()) {
+export function isOpenNow(text, timeZone, now = new Date()) {
   const rules = parseOpeningHours(text);
   if (!rules) return null;
-  const { day, minutes } = resortTime(now);
+  const { day, minutes } = resortTime(now, timeZone);
   const yesterday = (day + 6) % 7;
 
   // I OSM gælder den SIDSTE regel, der nævner en dag, for den dag.

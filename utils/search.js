@@ -1,8 +1,5 @@
-import { lifts } from '../data/verbierMap';
-import { elevations } from '../data/elevations';
 import { categoryMeta } from '../data/categoryMeta';
-import { allPlaces, placeCategory, nearestLiftStation } from './places';
-import { pisteGroups } from './pisteGroups';
+import { placeCategory } from './places';
 import { liftTypeLabels, pisteLabel } from './pistes';
 import { formatDistance } from './geo';
 
@@ -61,14 +58,14 @@ function nameRank(name, q) {
   return -1;
 }
 
-function nearLiftText(place) {
-  const nearest = nearestLiftStation(place);
+function nearLiftText(model, place) {
+  const nearest = model.nearestLiftStation(place);
   return nearest ? `${formatDistance(nearest.meters)} from ${nearest.lift.name} lift` : '';
 }
 
-function liftSubtitle(lift) {
+function liftSubtitle(model, lift) {
   const type = liftTypeLabels[lift.liftType] || liftTypeLabels.unknown;
-  const [a, b] = elevations[lift.id] || [];
+  const [a, b] = model.elevations[lift.id] || [];
   if (a === undefined || Math.abs(a - b) < 10) return type;
   return `${type} · ${Math.min(a, b)} → ${Math.max(a, b)} m`;
 }
@@ -77,9 +74,11 @@ function liftSubtitle(lift) {
 //   { results: [{ kind: 'place'|'lift'|'piste', id, title, subtitle, data }], total, category }
 // `category` er sat, når søgningen er et kategoriord ("hotels", "toilets",
 // "lifts") - så kan skærmen tilbyde at vise hele kategorien på kortet.
-export function search(query, limit = 25) {
+// `model` er det valgte skiområde (utils/resortModel.js).
+export function search(model, query, limit = 25) {
   const q = fold(query);
   if (!q) return null;
+  const { allPlaces, lifts, pisteGroups } = model;
   const category = categoryFor(q);
   const matches = [];
 
@@ -95,7 +94,7 @@ export function search(query, limit = 25) {
       kind: 'place',
       id: place.id,
       title: place.name,
-      subtitle: [meta?.singular, nearLiftText(place)].filter(Boolean).join(' · '),
+      subtitle: [meta?.singular, nearLiftText(model, place)].filter(Boolean).join(' · '),
       data: place,
     });
   }
@@ -109,7 +108,7 @@ export function search(query, limit = 25) {
       kind: 'lift',
       id: lift.id,
       title: lift.name,
-      subtitle: liftSubtitle(lift),
+      subtitle: liftSubtitle(model, lift),
       data: lift,
     });
   }
@@ -133,7 +132,7 @@ export function search(query, limit = 25) {
       kind: 'piste',
       id: group.id,
       title: group.name,
-      subtitle: `${pisteLabel(group.pistes[0])} · ${formatDistance(group.meters)}`,
+      subtitle: `${pisteLabel(group.pistes[0], model.convention)} · ${formatDistance(group.meters)}`,
       data: group,
     });
   }

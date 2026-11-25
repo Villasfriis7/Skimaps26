@@ -1,22 +1,23 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { findPlace } from '../utils/places';
+import { useResort } from './ResortContext';
 
 // Rigtig gem/hent-funktionalitet: brugerens gemte steder gemmes lokalt på
 // enheden med AsyncStorage, så de huskes selv efter appen lukkes og genåbnes.
 // Det er IKKE hardcoded data - listen starter tom og fyldes udelukkende af
 // brugerens egne tryk på hjerte-/gem-knappen.
+//
+// Hvert gemt sted husker, hvilket skiområde det hører til. Appen viser de
+// gemte steder for det valgte område; `savedElsewhere` er antallet i andre.
 const STORAGE_KEY = 'skimaps:savedPlaces';
+// Steder gemt, før appen kunne skifte skiområde, er alle fra Verbier.
+const LEGACY_RESORT_ID = 'verbier';
 
 const SavedPlacesContext = createContext(null);
 
-// Vi gemmer hele stedet (så listen kan vises uden opslag), men hvis stedet
-// stadig findes i appens data, bruger vi den nyeste udgave derfra. Ellers
-// ville en rettelse i data/*.js aldrig nå ud til allerede gemte steder.
-const refresh = (saved) => findPlace(saved.id) || saved;
-
 export function SavedPlacesProvider({ children }) {
-  const [savedPlaces, setSavedPlaces] = useState([]);
+  const { resort, model } = useResort();
+  const [allSaved, setAllSaved] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   // Hent evt. tidligere gemte steder fra disk, når appen starter.
@@ -25,9 +26,7 @@ export function SavedPlacesProvider({ children }) {
       .then((raw) => {
         const parsed = raw ? JSON.parse(raw) : [];
         // Beskyt mod ødelagte data på disken: kun en liste af steder med id.
-        if (Array.isArray(parsed)) {
-          setSavedPlaces(parsed.filter((p) => p && p.id).map(refresh));
-        }
+        if (Array.isArray(parsed)) setAllSaved(parsed.filter((p) => p && p.id));
       })
       .catch(() => {})
       .finally(() => setLoaded(true));
@@ -37,26 +36,44 @@ export function SavedPlacesProvider({ children }) {
   // så vi ikke overskriver gemte data med en tom liste ved opstart).
   useEffect(() => {
     if (!loaded) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(savedPlaces)).catch(() => {});
-  }, [savedPlaces, loaded]);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(allSaved)).catch(() => {});
+  }, [allSaved, loaded]);
 
-  const isSaved = useCallback((id) => savedPlaces.some((p) => p.id === id), [savedPlaces]);
+  const resortId = resort.id;
+  const here = useCallback((place) => (place.resortId || LEGACY_RESORT_ID) === resortId, [resortId]);
 
-  const toggleSave = useCallback((place) => {
-    setSavedPlaces((prev) =>
-      prev.some((p) => p.id === place.id)
-        ? prev.filter((p) => p.id !== place.id)
-        : [...prev, place]
-    );
-  }, []);
+  // Vi gemmer hele stedet (så listen kan vises uden opslag), men hvis stedet
+  // stadig findes i områdets data, bruger vi den nyeste udgave derfra. Ellers
+  // ville en rettelse i data aldrig nå ud til allerede gemte steder.
+  const savedPlaces = useMemo(
+    () => allSaved.filter(here).map((saved) => model.findPlace(saved.id) || saved),
+    [allSaved, here, model]
+  );
+  const savedElsewhere = allSaved.length - savedPlaces.length;
 
-  const removeSaved = useCallback((id) => {
-    setSavedPlaces((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+  const isSaved = useCallback((id) => allSaved.some((p) => p.id === id && here(p)), [allSaved, here]);
+
+  const toggleSave = useCallback(
+    (place) => {
+      setAllSaved((prev) =>
+        prev.some((p) => p.id === place.id && here(p))
+          ? prev.filter((p) => !(p.id === place.id && here(p)))
+          : [...prev, { ...place, resortId }]
+      );
+    },
+    [here, resortId]
+  );
+
+  const removeSaved = useCallback(
+    (id) => {
+      setAllSaved((prev) => prev.filter((p) => !(p.id === id && here(p))));
+    },
+    [here]
+  );
 
   const value = useMemo(
-    () => ({ savedPlaces, isSaved, toggleSave, removeSaved }),
-    [savedPlaces, isSaved, toggleSave, removeSaved]
+    () => ({ savedPlaces, savedElsewhere, isSaved, toggleSave, removeSaved }),
+    [savedPlaces, savedElsewhere, isSaved, toggleSave, removeSaved]
   );
 
   return <SavedPlacesContext.Provider value={value}>{children}</SavedPlacesContext.Provider>;

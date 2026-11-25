@@ -3,8 +3,9 @@ import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
+import { useResort } from '../context/ResortContext';
 import { categoryMeta } from '../data/categoryMeta';
-import { placeCategory, nearestLiftStation } from '../utils/places';
+import { placeCategory } from '../utils/places';
 import { formatDistance } from '../utils/geo';
 import { styles, colors } from '../styles/styles';
 
@@ -17,7 +18,12 @@ const UNDO_MS = 6000;
 // Et sted fjernes med ét tryk, men kan hentes tilbage med "Undo" i nogle
 // sekunder - et fejltryk med handsker skal ikke koste et gemt sted.
 export default function SavedPlacesScreen({ navigation }) {
-  const { savedPlaces, removeSaved, toggleSave } = useSavedPlaces();
+  const { savedPlaces, savedElsewhere, removeSaved, toggleSave } = useSavedPlaces();
+  const { resort, model } = useResort();
+  const elsewhere =
+    savedElsewhere > 0
+      ? `You also have ${savedElsewhere} saved ${savedElsewhere === 1 ? 'place' : 'places'} in other resorts.`
+      : null;
   const [removed, setRemoved] = useState(null);
   const undoTimer = useRef(null);
 
@@ -52,9 +58,9 @@ export default function SavedPlacesScreen({ navigation }) {
       <View style={styles.centered}>
         <StatusBar style="dark" />
         <Ionicons name="heart-outline" size={48} color={colors.textMuted} />
-        <Text style={styles.emptyTitle}>No saved places yet</Text>
+        <Text style={styles.emptyTitle}>No saved places in {resort.name} yet</Text>
         <Text style={[styles.emptyText, { marginBottom: 20 }]}>
-          Tap the heart on a restaurant, bar or hotel to keep it here.
+          Tap the heart on a restaurant, bar or hotel to keep it here.{elsewhere ? ` ${elsewhere}` : ''}
         </Text>
         <TouchableOpacity
           style={styles.button}
@@ -75,7 +81,7 @@ export default function SavedPlacesScreen({ navigation }) {
         <View style={styles.group}>
           {savedPlaces.map((item, index) => {
             const meta = categoryMeta[placeCategory(item)] || categoryMeta.restaurant;
-            const nearest = nearestLiftStation(item);
+            const nearest = model.nearestLiftStation(item);
             return (
               <React.Fragment key={item.id}>
                 {index > 0 ? <View style={styles.rowDivider} /> : null}
@@ -111,7 +117,9 @@ export default function SavedPlacesScreen({ navigation }) {
             );
           })}
         </View>
-        <Text style={styles.footnote}>Tap the heart to remove a place from the list.</Text>
+        <Text style={styles.footnote}>
+          Tap the heart to remove a place from the list.{elsewhere ? ` ${elsewhere}` : ''}
+        </Text>
       </ScrollView>
       {undoBar}
     </View>

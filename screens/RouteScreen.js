@@ -11,23 +11,24 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
-import { lifts, pisteColors, verbierRegion } from '../data/verbierMap';
-import { elevations } from '../data/elevations';
 import { useLocation } from '../context/LocationContext';
-import { useRoute, getSkiGraph } from '../context/RouteContext';
+import { useRoute } from '../context/RouteContext';
+import { useResort } from '../context/ResortContext';
 import { findRoute, isOnNetwork, skillLevels } from '../utils/routing';
-import { liftBottom } from '../utils/places';
-import { defaultLift } from '../utils/reach';
-import { liftTypeLabels, difficultyLabels } from '../utils/pistes';
+import {
+  liftTypeLabels,
+  difficultyLabel,
+  shortDifficulty,
+  pisteColor,
+  skillLabel,
+  skillColor,
+} from '../utils/pistes';
 import { distanceMeters, formatDistance, formatDuration } from '../utils/geo';
 import { styles, colors } from '../styles/styles';
 
-// Lifterne i alfabetisk rækkefølge til "start fra"-listen.
-const sortedLifts = [...lifts].sort((a, b) => a.name.localeCompare(b.name));
-
 // "Gondola · 1,532 → 2,200 m" - højderne skiller lifter med samme navn ad
 // (der er fx to, der hedder Tournelle).
-function liftDetails(lift) {
+function liftDetails(lift, elevations) {
   const type = liftTypeLabels[lift.liftType] || liftTypeLabels.unknown;
   const [a, b] = elevations[lift.id] || [];
   if (a === undefined || Math.abs(a - b) < 10) return type;
@@ -36,15 +37,6 @@ function liftDetails(lift) {
 
 // Sværeste pist på ruten - det, en nervøs skiløber vil vide først.
 const DIFFICULTY_ORDER = ['novice', 'easy', 'intermediate', 'advanced', 'expert', 'extreme', 'freeride'];
-const SHORT_DIFFICULTY = {
-  novice: 'Green',
-  easy: 'Blue',
-  intermediate: 'Red',
-  advanced: 'Black',
-  expert: 'Black',
-  extreme: 'Black',
-  freeride: 'Off-piste',
-};
 function hardestPiste(steps) {
   let hardest = null;
   for (const step of steps) {
@@ -57,7 +49,7 @@ function hardestPiste(steps) {
 }
 
 // Ét trin i ruten som tekst + ikon.
-function describeStep(step) {
+function describeStep(step, convention) {
   const length = formatDistance(step.meters);
   if (step.kind === 'lift') {
     return {
@@ -71,9 +63,9 @@ function describeStep(step) {
   if (step.kind === 'piste') {
     return {
       icon: 'ellipse',
-      color: pisteColors[step.difficulty] || pisteColors.unknown,
+      color: pisteColor(step.difficulty, convention),
       title: step.name ? `Ski ${step.name}` : 'Ski an unnamed piste',
-      subtitle: `${difficultyLabels[step.difficulty] || difficultyLabels.unknown} · ${length}`,
+      subtitle: `${difficultyLabel(step.difficulty, convention)} · ${length}`,
     };
   }
   return {
@@ -95,7 +87,11 @@ export default function RouteScreen({ navigation, route }) {
   const { destination, start } = route.params;
   const { location, locate } = useLocation();
   const { setActiveRoute, skill, setSkill } = useRoute();
-  const graph = getSkiGraph();
+  const { resort, model } = useResort();
+  const { lifts, elevations, liftBottom, defaultLift, convention } = model;
+  const graph = model.getGraph();
+  // Lifterne i alfabetisk rækkefølge til "start fra"-listen.
+  const sortedLifts = useMemo(() => [...lifts].sort((a, b) => a.name.localeCompare(b.name)), [lifts]);
 
   // Start: brugerens position, hvis den ligger i skiområdet - ellers en lift.
   // `startChoice` er null, indtil brugeren selv har valgt; så længe følger vi
@@ -114,10 +110,10 @@ export default function RouteScreen({ navigation, route }) {
   const startLabel = useMyLocation ? 'your location' : startLift.name;
 
   const result = useMemo(
-    () => findRoute(graph, startPoint, destination, { skill }),
+    () => findRoute(graph, startPoint, destination, { skill, convention }),
     // startPoint er et nyt objekt ved hver rendering - sammenlign på tallene.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [graph, startPoint.latitude, startPoint.longitude, destination, skill]
+    [graph, startPoint.latitude, startPoint.longitude, destination, skill, convention]
   );
 
   const destinationReachable = isOnNetwork(graph, destination);
@@ -128,12 +124,12 @@ export default function RouteScreen({ navigation, route }) {
       ? null
       : skillLevels
           .slice(skillIndex + 1)
-          .find((level) => findRoute(graph, startPoint, destination, { skill: level.id })) || null;
+          .find((level) => findRoute(graph, startPoint, destination, { skill: level.id, convention })) || null;
   const noRouteText =
     skill === 'none'
       ? `You can't get to ${destination.name} from ${startLabel} without skis - the way there includes a ski piste.`
       : harderLevel
-        ? `There is no way to ${destination.name} from ${startLabel} on ${skillLevels[skillIndex].label.toLowerCase()} pistes or easier.`
+        ? `There is no way to ${destination.name} from ${startLabel} on ${skillLabel(skill, convention).toLowerCase()} pistes or easier.`
         : `No route found to ${destination.name} from ${startLabel}. Try another starting point.`;
 
   const chooseMyLocation = async () => {
@@ -160,10 +156,10 @@ export default function RouteScreen({ navigation, route }) {
       return;
     }
     if (!isOnNetwork(graph, point)) {
-      const away = formatDistance(distanceMeters(point, verbierRegion));
+      const away = formatDistance(distanceMeters(point, model.region));
       Alert.alert(
         'You are not on the slopes',
-        `You are about ${away} from Verbier, so a ski route cannot start from your location. Pick a lift station instead.`
+        `You are about ${away} from ${resort.name}, so a ski route cannot start from your location. Pick a lift station instead.`
       );
       return;
     }
@@ -285,7 +281,7 @@ export default function RouteScreen({ navigation, route }) {
                       onPress={() => chooseLift(lift)}
                     >
                       <Text style={styles.routePickerName}>{lift.name}</Text>
-                      <Text style={styles.routePickerType}>{liftDetails(lift)}</Text>
+                      <Text style={styles.routePickerType}>{liftDetails(lift, elevations)}</Text>
                     </TouchableOpacity>
                   ))}
                   {liftMatches.length === 0 ? (
@@ -315,12 +311,12 @@ export default function RouteScreen({ navigation, route }) {
                       <View
                         style={[
                           styles.skillDot,
-                          { backgroundColor: pisteColors[level.id], borderColor: on ? colors.white : 'transparent' },
+                          { backgroundColor: skillColor(level.id, convention), borderColor: on ? colors.white : 'transparent' },
                         ]}
                       />
                     )}
                     <Text style={[styles.chipText, on && styles.chipTextActive]}>
-                      {level.label}
+                      {skillLabel(level.id, convention)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -343,7 +339,7 @@ export default function RouteScreen({ navigation, route }) {
           {harderLevel ? (
             <TouchableOpacity style={styles.buttonSecondary} onPress={() => setSkill(harderLevel.id)}>
               <Text style={styles.buttonSecondaryText}>
-                Show the route with {harderLevel.label.toLowerCase()} pistes
+                Show the route with {skillLabel(harderLevel.id, convention).toLowerCase()} pistes
               </Text>
             </TouchableOpacity>
           ) : null}
@@ -361,7 +357,7 @@ export default function RouteScreen({ navigation, route }) {
             <Text style={styles.routeSummaryMeta}>
               {formatDistance(result.totalMeters)}
               {liftCount ? ` · ${liftCount} ${liftCount === 1 ? 'lift' : 'lifts'}` : ''}
-              {hardest ? ` · hardest piste: ${SHORT_DIFFICULTY[hardest]}` : ''}
+              {hardest ? ` · hardest piste: ${shortDifficulty(hardest, convention)}` : ''}
             </Text>
           </View>
 
@@ -376,7 +372,7 @@ export default function RouteScreen({ navigation, route }) {
               streg imellem, så rækkefølgen kan læses med et blik. */}
           <View style={[styles.group, { paddingTop: 14 }]}>
             {result.steps.map((step, index) => {
-              const info = describeStep(step);
+              const info = describeStep(step, convention);
               const last = index === result.steps.length - 1;
               return (
                 <View key={step.key} style={styles.step}>
