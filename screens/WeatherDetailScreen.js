@@ -17,7 +17,8 @@ function weekdayOf(isoDate) {
   return dayNames[new Date(year, month - 1, day).getDay()];
 }
 
-// Detaljeret vejrudsigt for skiområdets landsby - modtager allerede hentet vejrdata via
+// Detaljeret vejrudsigt for skiområdet: landsbyen øverst, vejret oppe på
+// bjerget lige nu og seks dage frem. Modtager allerede hentet vejrdata via
 // route.params fra ExploreScreen (samme Open-Meteo-kald genbruges, så vi ikke
 // henter data to gange).
 export default function WeatherDetailScreen({ route }) {
@@ -35,6 +36,12 @@ export default function WeatherDetailScreen({ route }) {
 
   const { current, daily } = weather;
   const currentMeta = weatherCodeMeta(current.code, current.isDay);
+
+  // Vejret i højden, toppen først - det er dér, skiløberne spørger til vind
+  // og sne. Er der kun landsbyen (fladt område, eller vejrdata hentet før
+  // højderne kom med), vises afsnittet slet ikke: tallene står allerede ovenfor.
+  const mountain = (weather.levels || []).length > 1 ? [...weather.levels].reverse() : [];
+  const hasFreezingLevel = mountain.length > 0 && weather.freezingLevelM != null;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.scrollContent}>
@@ -70,9 +77,63 @@ export default function WeatherDetailScreen({ route }) {
       </View>
 
       <Text style={[styles.footnote, { marginTop: -12, marginBottom: 20 }]}>
-        These are the weather model's figures for the village, not a measured piste report. There is
-        usually more snow and more wind higher up.
+        These are the weather model's figures for the village, not a measured piste report.{' '}
+        {mountain.length > 0
+          ? "The same model's figures for higher up are below."
+          : 'There is usually more snow and more wind higher up.'}
       </Text>
+
+      {mountain.length > 0 ? (
+        <>
+          <Text style={[styles.sectionTitle, { marginBottom: 12 }]} accessibilityRole="header">
+            On the mountain now
+          </Text>
+          {/* Luften ned til næste afsnit (20) ligger på det sidste element. */}
+          <View style={[styles.group, !hasFreezingLevel && { marginBottom: 20 }]}>
+            {mountain.map((level, i) => {
+              const meta = weatherCodeMeta(level.code, level.isDay);
+              const wind =
+                level.windSpeed != null
+                  ? `Wind ${level.windSpeed} km/h${level.windGusts != null ? `, gusts ${level.windGusts} km/h` : ''}`
+                  : level.windGusts != null
+                    ? `Gusts ${level.windGusts} km/h`
+                    : null;
+              const snow = level.snowDepthCm != null ? `${level.snowDepthCm} cm snow` : null;
+              const details = [wind, snow].filter(Boolean).join(' · ');
+              return (
+                <React.Fragment key={level.id}>
+                  {i > 0 ? <View style={styles.rowDivider} /> : null}
+                  <View style={styles.row}>
+                    <View style={styles.rowTile}>
+                      <Ionicons name={meta.icon} size={22} color={colors.primary} />
+                    </View>
+                    <View style={styles.rowTextWrap}>
+                      <Text style={styles.rowTitle}>
+                        {level.label}
+                        {level.elevation != null ? ` · ${level.elevation.toLocaleString('en-US')} m` : ''}
+                      </Text>
+                      {details ? <Text style={styles.rowSubtitle}>{details}</Text> : null}
+                    </View>
+                    {level.temperature != null ? (
+                      <Text
+                        style={[styles.forecastHigh, { marginLeft: 8 }]}
+                        accessibilityLabel={`${level.temperature} degrees`}
+                      >
+                        {level.temperature}°
+                      </Text>
+                    ) : null}
+                  </View>
+                </React.Fragment>
+              );
+            })}
+          </View>
+          {hasFreezingLevel ? (
+            <Text style={[styles.footnote, { marginTop: -4, marginBottom: 20 }]}>
+              Freezing level about {(Math.round(weather.freezingLevelM / 100) * 100).toLocaleString('en-US')} m.
+            </Text>
+          ) : null}
+        </>
+      ) : null}
 
       <Text style={[styles.sectionTitle, { marginBottom: 12 }]} accessibilityRole="header">
         6-day forecast

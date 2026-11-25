@@ -53,6 +53,7 @@ export default function ExploreScreen({ navigation }) {
   const [weather, setWeather] = useState(null);
   const [weatherError, setWeatherError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [chipTooLong, setChipTooLong] = useState(null);
   const searchInput = useRef(null);
   const loadingWeather = useRef(false);
   const { savedPlaces, isSaved } = useSavedPlaces();
@@ -61,7 +62,8 @@ export default function ExploreScreen({ navigation }) {
     if (loadingWeather.current) return Promise.resolve();
     loadingWeather.current = true;
     setWeatherError(false);
-    return fetchWeather(model.weatherPoint)
+    // Landsby, midt på bjerget og top hentes i ét kald (data/weather.js).
+    return fetchWeather(model.weatherLevels)
       .then(setWeather)
       .catch(() => setWeatherError(true))
       .finally(() => {
@@ -118,6 +120,17 @@ export default function ExploreScreen({ navigation }) {
   };
 
   const currentMeta = weather ? weatherCodeMeta(weather.current.code, weather.current.isDay) : null;
+
+  // Vejr-feltet viser landsbyen, og temperaturen på toppen sættes bagefter -
+  // men kun hvis teksten stadig kan stå på to linjer. Det ved vi først, når
+  // telefonen har lagt teksten ud (onTextLayout): fylder den tre linjer,
+  // husker vi netop den tekst som for lang og viser feltet uden toppen.
+  const villageText = weather
+    ? `${weather.current.temperature}°C · ${currentMeta.label} · ${weather.current.snowConditions}`
+    : '';
+  const topNow = weather?.levels?.find((level) => level.id === 'top');
+  const withTop = topNow?.temperature != null ? `${villageText} · Top ${topNow.temperature}°` : null;
+  const chipText = withTop && chipTooLong !== withTop ? withTop : villageText;
 
   const tiles = [
     { label: 'Restaurants', icon: 'restaurant-outline', onPress: () => openCategory('restaurant') },
@@ -185,8 +198,13 @@ export default function ExploreScreen({ navigation }) {
               {weather ? (
                 <>
                   <Ionicons name={currentMeta.icon} size={22} color={colors.white} />
-                  <Text style={styles.heroWeatherText}>
-                    {weather.current.temperature}°C · {currentMeta.label} · {weather.current.snowConditions}
+                  <Text
+                    style={styles.heroWeatherText}
+                    onTextLayout={(event) => {
+                      if (chipText === withTop && event.nativeEvent.lines.length > 2) setChipTooLong(withTop);
+                    }}
+                  >
+                    {chipText}
                   </Text>
                   <Ionicons name="chevron-forward" size={18} color={colors.white} />
                 </>

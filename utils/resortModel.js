@@ -74,6 +74,70 @@ function demoFriends({ allPlaces, defaultLift, liftBottom }) {
   return DEMO_FRIENDS.map((friend, i) => (spots[i] ? { ...friend, ...spots[i] } : null)).filter(Boolean);
 }
 
+// VEJR OPPE PÅ BJERGET
+//
+// Brugertests viste, at skiløbere vil kende vind, temperatur og sne dér, hvor
+// de står på ski - ikke nede i landsbyen. Derfor finder vi op til tre højder
+// at hente vejr for: landsbyen, midt på bjerget og toppen. Liftstationerne er
+// de eneste punkter på bjerget, vi kender højden på, så dem vælger vi imellem.
+//
+// Er toppen under 150 m over landsbyen, er vejret det samme begge steder, og
+// så nøjes vi med landsbyen. Det samme gør vi, når vi ingen højder kender.
+const TOP_MIN_RISE_M = 150;
+// To stationer under 50 m fra hinanden er samme sted (fx to lifter, der
+// mødes på samme plateau) - dem viser vi aldrig som to forskellige højder.
+const SAME_PLACE_M = 50;
+// Højderne kommer fra en højdemodel med ca. 90 m opløsning, så stationer
+// inden for 50 m af "halvvejs" er lige gode. Blandt dem tager vi den, der
+// ligger mellem landsbyen og toppen - i store, sammenbyggede områder havnede
+// "midt på bjerget" ellers i en helt anden dal (Verbier: 11 km væk i Thyon).
+const MID_TOLERANCE_M = 50;
+
+const lowest = (list, score) =>
+  list.reduce((best, item) => (score(item) < score(best) ? item : best), list[0]) || null;
+
+// `village` er { point, elevation } (højden må gerne mangle), `stations` er
+// liftstationerne fra buildModel(). Returnerer landsby -> midt -> top.
+export function pickWeatherLevels(village, stations) {
+  const villageLevel = {
+    id: 'village',
+    label: 'Village',
+    point: village.point,
+    elevation: Number.isFinite(village.elevation) ? Math.round(village.elevation) : null,
+  };
+  const known = stations.filter((station) => Number.isFinite(station.elevation));
+  if (!village.point || known.length === 0) return [villageLevel];
+
+  // Kender vi ikke landsbyens højde, regner vi fra den lavest liggende station.
+  const base = villageLevel.elevation ?? Math.min(...known.map((station) => station.elevation));
+  const top = lowest(known, (station) => -station.elevation);
+  const rise = top.elevation - base;
+  if (rise < TOP_MIN_RISE_M || distanceMeters(top, village.point) < SAME_PLACE_M) return [villageLevel];
+
+  // Midt på bjerget: stationen tættest på halvvejs i højde. Den skal ligge i
+  // den midterste halvdel af stigningen - ellers ville "Mid-mountain" i små
+  // områder blive et børnebånd lige ved landsbyen eller en nabo til toppen.
+  const half = base + rise / 2;
+  const off = (station) => Math.abs(station.elevation - half);
+  const detour = (station) => distanceMeters(village.point, station) + distanceMeters(station, top);
+  const candidates = known.filter(
+    (station) =>
+      off(station) <= rise / 4 &&
+      distanceMeters(station, top) >= SAME_PLACE_M &&
+      distanceMeters(station, village.point) >= SAME_PLACE_M
+  );
+  const halfway = candidates.filter((station) => off(station) <= MID_TOLERANCE_M);
+  const mid = halfway.length ? lowest(halfway, detour) : lowest(candidates, off);
+
+  const level = (id, label, station) => ({
+    id,
+    label,
+    point: { latitude: station.latitude, longitude: station.longitude },
+    elevation: Math.round(station.elevation),
+  });
+  return [villageLevel, mid && level('mid', 'Mid-mountain', mid), level('top', 'Top', top)].filter(Boolean);
+}
+
 // Uden håndplukkede steder viser Explore de spisesteder, vi ved mest om.
 function bestDocumented(allPlaces) {
   const score = (p) => (p.openingHours ? 2 : 0) + (p.website ? 1 : 0) + (p.phone ? 1 : 0) + (p.cuisine ? 1 : 0);
@@ -105,9 +169,11 @@ export function buildModel(resort) {
     const last = lift.coordinates[lift.coordinates.length - 1];
     const [startElev, endElev] = elevations[lift.id] || [];
     const firstIsBottom = startElev === undefined || startElev <= endElev;
+    // Højden følger punktet (første punkt = første højde), også når liften er
+    // tegnet oppefra og ned - ellers får topstationen bundens højde.
     return [
-      { lift, end: firstIsBottom ? 'bottom' : 'top', elevation: firstIsBottom ? startElev : endElev, ...first },
-      { lift, end: firstIsBottom ? 'top' : 'bottom', elevation: firstIsBottom ? endElev : startElev, ...last },
+      { lift, end: firstIsBottom ? 'bottom' : 'top', elevation: startElev, ...first },
+      { lift, end: firstIsBottom ? 'top' : 'bottom', elevation: endElev, ...last },
     ];
   });
 
@@ -186,6 +252,14 @@ export function buildModel(resort) {
   const weatherPoint =
     resort.weatherPointFixed || !defaultLift ? resort.weatherPoint : liftBottom(defaultLift);
 
+  // Landsbyens højde følger punktet: det indskrevne punkt har sin egen højde,
+  // ellers er det højden på hovedliftens bundstation.
+  const villageElevation =
+    resort.weatherPointFixed || !defaultLift
+      ? resort.weatherElevation
+      : stations.find((s) => s.lift.id === defaultLift.id && s.end === 'bottom').elevation;
+  const weatherLevels = pickWeatherLevels({ point: weatherPoint, elevation: villageElevation }, stations);
+
   return {
     resort,
     id: resort.id,
@@ -194,6 +268,9 @@ export function buildModel(resort) {
     timeZone: resort.timeZone || null,
     region: resort.region,
     weatherPoint,
+    // Landsby, midt på bjerget og top (se pickWeatherLevels) - kun landsbyen,
+    // hvis området er fladt, eller vi ikke kender højderne.
+    weatherLevels,
     towns: resort.towns || [],
     lifts,
     pistes,
