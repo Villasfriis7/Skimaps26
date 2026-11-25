@@ -101,21 +101,26 @@ describe.each(bundledResorts.map((item) => [item.name, item]))('%s', (name, item
     ).toEqual([]);
   });
 
-  test('uden ski: kun gåture og lifter med lukkede kabiner', () => {
+  test('uden ski: kun gåture og lifter, fodgængere må tage', () => {
+    // Hvor skiområdet har en liste over fodgænger-lifter (Verbier), gælder
+    // den - ellers lifter med lukkede kabiner.
+    const walkOn = model.resort.pedestrianLifts;
+    const allowed = (step) => (walkOn ? walkOn.includes(step.name) : CABINS.includes(step.liftType));
     expect(
       problems(({ level, route }) => {
         if (level !== 'none') return null;
-        const bad = route.steps.find(
-          (step) => step.kind === 'piste' || (step.kind === 'lift' && !CABINS.includes(step.liftType))
-        );
+        const bad = route.steps.find((step) => step.kind === 'piste' || (step.kind === 'lift' && !allowed(step)));
         return bad && `${bad.kind} "${bad.name}" (${bad.liftType || bad.difficulty})`;
       })
     ).toEqual([]);
   });
 
-  test('kun gondoler, kabelbaner og kombinerede lifter tages ned', () => {
+  test('skiløbere tager kun gondoler, kabelbaner og kombinerede lifter ned', () => {
+    // Uden ski må man også tage en stolelift ned, hvis den står på
+    // skiområdets liste over fodgænger-lifter.
     expect(
-      problems(({ route }) => {
+      problems(({ level, route }) => {
+        if (level === 'none') return null;
         const bad = route.steps.find((step) => step.kind === 'lift' && step.down && !CABINS.includes(step.liftType));
         return bad && `${bad.liftType} "${bad.name}" tages ned`;
       })
@@ -189,7 +194,10 @@ describe.each(bundledResorts.map((item) => [item.name, item]))('%s', (name, item
   test('et højere niveau finder altid en rute, når et lavere gør - og aldrig en langsommere', () => {
     // Gåture under 25 m i hver ende tælles ikke med i tiden (ca. 30 s hver),
     // så to niveauer kan afvige op til et minut, selvom ruten er "den samme".
-    const SLACK_S = 60;
+    // Derudover vælger en skiløber hellere en pist end at tage liften ned,
+    // selvom pisten er op til syv minutter langsommere (RIDE_DOWN_PENALTY_S i
+    // utils/routing.js) - og det sker oftere, jo flere pister man må køre.
+    const SLACK_S = 60 + 420;
     const list = [];
     for (const { place, routes } of rows) {
       for (let low = 0; low < routes.length; low++) {
@@ -219,6 +227,7 @@ describe.each(bundledResorts.map((item) => [item.name, item]))('%s', (name, item
       totalSeconds: 0,
       totalMeters: 0,
       coordinates: [],
+      hardest: null,
     });
   });
 });
@@ -255,7 +264,9 @@ describe('Verbier: kendte ruter', () => {
     const route = to('5', 'none');
     expect(route).not.toBeNull();
     const lifts = route.steps.filter((step) => step.kind === 'lift');
-    expect(lifts.map((step) => step.liftType)).toEqual(['gondola', 'mixed_lift', 'mixed_lift']);
+    // Chaux Express er tegnet som to stykker i OpenStreetMap, men er ét trin.
+    expect(lifts.map((step) => step.liftType)).toEqual(['gondola', 'mixed_lift']);
+    expect(lifts[1]).toMatchObject({ name: 'Chaux-Express', joined: true, down: false });
     expect(lifts[0].name).toBe('Médran 2');
     expect(route.steps.some((step) => step.kind === 'piste')).toBe(false);
     expect(route.totalSeconds / 60).toBeGreaterThan(22);
@@ -317,7 +328,7 @@ describe('Verbier: kendte ruter', () => {
     // RouteScreen viser "You are already there", når `steps` er tom.
     const cafe = model.findPlace('cafe-21');
     expect(distanceMeters(start.point, cafe)).toBeLessThan(25);
-    expect(to('cafe-21', 'none')).toEqual({ steps: [], totalSeconds: 0, totalMeters: 0, coordinates: [] });
+    expect(to('cafe-21', 'none')).toEqual({ steps: [], totalSeconds: 0, totalMeters: 0, coordinates: [], hardest: null });
   });
 });
 
@@ -337,16 +348,9 @@ describe("Alpe d'Huez: en rute, hvor alle trin er skjult", () => {
     expect(route.totalSeconds).toBeGreaterThan(60);
   });
 
-  // KENDT FEJL (utils/routing.js:394-398): findRoute skjuler gå-stykker under
-  // 40 m og pist-stumper under 120/200 m, fordi de er "støj" på listen. Her
-  // består HELE ruten af sådanne stumper (kort gåtur + navnløs pist-stump +
-  // kort gåtur), så listen bliver tom, selvom ruten er 158 m og tager 85
-  // sekunder. RouteScreen (linje 347) tolker en tom liste som "You are
-  // already there - Hôtel Peer Gynt is right here", og detaljesiden viser
-  // ingen "kan nås"-tekst (reachText giver null). Uden ski er der derimod et
-  // gå-trin på 2 minutter. Når fejlen er rettet, "fejler" denne test - lav
-  // den så om til en almindelig test().
-  test.failing('en rute på over 100 m har mindst ét trin på listen', () => {
+  // Hele ruten består af korte stumper (gåtur + navnløs pist-stump + gåtur), som normalt
+  // skjules som støj. Før blev listen tom, og appen skrev "You are already there".
+  test('en rute på over 100 m har mindst ét trin på listen', () => {
     const route = findRoute(graph, start.point, hotel, { skill: 'easy' });
     expect(route.steps.length).toBeGreaterThan(0);
   });
@@ -354,5 +358,35 @@ describe("Alpe d'Huez: en rute, hvor alle trin er skjult", () => {
   test('uden ski vises samme tur som et gå-trin', () => {
     const route = findRoute(graph, start.point, hotel, { skill: 'none' });
     expect(route.steps.map((step) => step.kind)).toEqual(['walk']);
+  });
+});
+
+describe('Verbier: sværeste pist og lift ned (fra brugertesten)', () => {
+  const model = buildModel(bundledResort('verbier').load());
+  const graph = model.getGraph();
+  const start = defaultStart(model, null);
+
+  test('"hardest" tæller alle stykker - også de korte, der ikke står på listen', () => {
+    const order = ['novice', 'easy', 'intermediate', 'advanced', 'expert', 'extreme', 'freeride'];
+    for (const place of model.allPlaces) {
+      const route = findRoute(graph, start.point, place, { skill: 'intermediate' });
+      if (!route) continue;
+      for (const step of route.steps) {
+        if (step.kind !== 'piste') continue;
+        expect(order.indexOf(route.hardest)).toBeGreaterThanOrEqual(order.indexOf(step.difficulty));
+      }
+      // Aldrig sværere end det niveau, ruten er regnet for.
+      if (route.hardest) expect(order.indexOf(route.hardest)).toBeLessThanOrEqual(order.indexOf('intermediate'));
+    }
+  });
+
+  test('fra toppen af Mont-Fort kører en sort-løber ned ad pisten i stedet for at tage kabelbanen ned', () => {
+    const lift = model.lifts.find((item) => item.name === 'Mont-Fort');
+    const top = lift.coordinates[lift.coordinates.length - 1];
+    const down = findRoute(graph, top, model.findPlace('hotel-198'), { skill: 'advanced' });
+    expect(down.steps[0]).toMatchObject({ kind: 'piste', difficulty: 'advanced' });
+    // På rødt niveau er kabelbanen eneste vej ned fra toppen.
+    const red = findRoute(graph, top, model.findPlace('hotel-198'), { skill: 'intermediate' });
+    expect(red.steps[0]).toMatchObject({ kind: 'lift', down: true });
   });
 });

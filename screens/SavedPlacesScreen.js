@@ -7,6 +7,7 @@ import { useResort } from '../context/ResortContext';
 import { categoryMeta } from '../data/categoryMeta';
 import { placeCategory } from '../utils/places';
 import { formatDistance } from '../utils/geo';
+import { useBottomSpace } from '../utils/safeArea';
 import { styles, colors } from '../styles/styles';
 
 const UNDO_MS = 6000;
@@ -18,6 +19,8 @@ const UNDO_MS = 6000;
 // Et sted fjernes med ét tryk, men kan hentes tilbage med "Undo" i nogle
 // sekunder - et fejltryk med handsker skal ikke koste et gemt sted.
 export default function SavedPlacesScreen({ navigation }) {
+  const bottomSpace = useBottomSpace();
+  const undoBottom = useBottomSpace(24);
   const { savedPlaces, savedElsewhere, removeSaved, toggleSave } = useSavedPlaces();
   const { resort, model } = useResort();
   const elsewhere =
@@ -43,7 +46,7 @@ export default function SavedPlacesScreen({ navigation }) {
   };
 
   const undoBar = removed ? (
-    <View style={styles.undoBar}>
+    <View style={[styles.undoBar, { bottom: undoBottom }]}>
       <Text style={styles.undoBarText} numberOfLines={1}>
         Removed {removed.name}
       </Text>
@@ -77,7 +80,10 @@ export default function SavedPlacesScreen({ navigation }) {
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomSpace + (removed ? 56 : 0) }]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.group}>
           {savedPlaces.map((item, index) => {
             const meta = categoryMeta[placeCategory(item)] || categoryMeta.restaurant;

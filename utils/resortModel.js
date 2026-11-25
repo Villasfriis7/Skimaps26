@@ -1,6 +1,6 @@
 import { buildGraph } from './routing';
 import { buildPisteGroups } from './pisteGroups';
-import { pisteKind } from './pistes';
+import { cleanPisteName, pisteKind } from './pistes';
 import { placeCategory } from './places';
 import { distanceMeters, lineLengthMeters } from './geo';
 
@@ -32,7 +32,8 @@ function placeCounter(places) {
     const lon0 = Math.floor(point.longitude / CELL);
     let count = 0;
     for (let i = -1; i <= 1; i++) {
-      for (let j = -2; j <= 2; j++) {
+      // Tre celler til hver side i øst-vest: cellerne er smalle langt mod nord.
+      for (let j = -3; j <= 3; j++) {
         for (const place of grid.get(`${lat0 + i}:${lon0 + j}`) || []) {
           if (distanceMeters(place, point) <= radius) count += 1;
         }
@@ -149,8 +150,24 @@ function bestDocumented(allPlaces) {
     .map(({ place }) => place);
 }
 
+// En linje, der er mærket "extreme" - eller "expert" uden navn uden for
+// Nordamerika, hvor "expert" er dobbelt sort - er ikke en præpareret pist.
+// I Verbier er det fx en 9 km lang nedkørsel fra Rosablanche uden en eneste
+// lift i nærheden. Den tegnes og regnes som off-piste: stiplet på kortet,
+// ikke med i "km pister", og kun i ruter på off-piste-niveau.
+function asMarked(piste, convention) {
+  if (pisteKind(piste) !== 'downhill') return piste;
+  const unpisted =
+    piste.difficulty === 'extreme' ||
+    (piste.difficulty === 'expert' && convention !== 'north_america' && !cleanPisteName(piste.name));
+  return unpisted ? { ...piste, difficulty: 'freeride' } : piste;
+}
+
+const MOUNTAIN_ABOVE_BASE_M = 150;
+
 export function buildModel(resort) {
-  const { lifts, pistes } = resort;
+  const { lifts } = resort;
+  const pistes = resort.pistes.map((piste) => asMarked(piste, resort.convention || 'europe'));
   const elevations = resort.elevations || {};
   const pois = resort.pois || [];
 
@@ -178,13 +195,41 @@ export function buildModel(resort) {
   });
 
   // Nærmeste liftstation til et punkt: { lift, end: 'bottom'|'top', meters }.
+  // En bundstation foretrækkes, når den ligger næsten lige så tæt på: folk
+  // kender et sted som "ved Médran", ikke som "ved toppen af gondolen fra
+  // dalen", selvom den station ligger 100 m nærmere.
+  const PREFER_BOTTOM_M = 150;
   const nearestLiftStation = (point) => {
     let best = null;
+    let bestBottom = null;
     for (const station of stations) {
       const meters = distanceMeters(point, station);
       if (!best || meters < best.meters) best = { lift: station.lift, end: station.end, meters };
+      if (station.end === 'bottom' && (!bestBottom || meters < bestBottom.meters)) {
+        bestBottom = { lift: station.lift, end: station.end, meters };
+      }
     }
-    return best;
+    return bestBottom && bestBottom.meters <= best.meters + PREFER_BOTTOM_M ? bestBottom : best;
+  };
+
+  // Øverste ende af en pist eller kælkebane - der, hvor man starter.
+  const pisteTop = (group) => {
+    let top = null;
+    for (const piste of group.pistes) {
+      const [startElev, endElev] = elevations[piste.id] || [];
+      const first = piste.coordinates[0];
+      const last = piste.coordinates[piste.coordinates.length - 1];
+      // Uden højder: OpenStreetMap tegner pister i køreretningen.
+      const candidates =
+        startElev === undefined ? [{ point: first, elevation: 0 }] : [
+          { point: first, elevation: startElev },
+          { point: last, elevation: endElev },
+        ];
+      for (const candidate of candidates) {
+        if (!top || candidate.elevation > top.elevation) top = candidate;
+      }
+    }
+    return top ? { latitude: top.point.latitude, longitude: top.point.longitude } : null;
   };
 
   // Bundstationen for en lift - bruges som startpunkt i rutefindingen.
@@ -205,7 +250,9 @@ export function buildModel(resort) {
   // (omkring 20 ms for Verbier), og genbruges derefter.
   let graph = null;
   const getGraph = () => {
-    if (!graph) graph = buildGraph({ lifts, pistes, elevations, isVillage });
+    if (!graph) {
+      graph = buildGraph({ lifts, pistes, elevations, isVillage, pedestrianLifts: resort.pedestrianLifts || null });
+    }
     return graph;
   };
 
@@ -231,6 +278,24 @@ export function buildModel(resort) {
     }
   }
   defaultLift = defaultLift || lifts[0] || null;
+
+  // "Oppe på bjerget": ikke i en by, og nærmeste liftstation ligger et godt
+  // stykke over hovedliftens bundstation. Så tæller hverken landsbyens
+  // udkant eller gårdene nede i dalen med, når nogen leder efter et sted at
+  // spise frokost på pisten.
+  const baseStation = stations.find((s) => s.lift.id === defaultLift.id && s.end === 'bottom');
+  const mountainFrom = Number.isFinite(baseStation?.elevation) ? baseStation.elevation + MOUNTAIN_ABOVE_BASE_M : null;
+  const onMountain = (place) => {
+    if (isVillage(place)) return false;
+    let nearest = null;
+    for (const station of stations) {
+      if (!Number.isFinite(station.elevation)) continue;
+      const meters = distanceMeters(place, station);
+      if (!nearest || meters < nearest.meters) nearest = { meters, elevation: station.elevation };
+    }
+    if (!nearest || mountainFrom === null) return true;
+    return nearest.elevation >= mountainFrom;
+  };
 
   // Kun rigtige alpine pister tæller med i tallet - ikke skitur-ruter,
   // kælkebaner og off-piste. Vi viser samlet længde og ikke et antal, fordi
@@ -286,6 +351,9 @@ export function buildModel(resort) {
     curated: pois.length > 0,
     nearestLiftStation,
     liftBottom,
+    pisteTop,
+    isVillage,
+    onMountain,
     pisteGroups,
     pisteGroupOf,
     getGraph,

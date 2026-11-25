@@ -231,8 +231,10 @@ describe('Verbier (det håndlavede område)', () => {
   const model = buildModel(verbier);
 
   test('nøgletal, som README og appen nævner', () => {
-    expect(model.lifts).toHaveLength(47);
-    expect(model.pisteKm).toBe(144);
+    // 47 i OpenStreetMap-udtrækket minus to, der ikke er skilifter (data/resorts/verbier.js).
+    expect(model.lifts).toHaveLength(45);
+    // 144 km minus 9 km upræpareret nedkørsel fra Rosablanche, der tegnes som off-piste.
+    expect(model.pisteKm).toBe(134);
     expect(model.toilets).toHaveLength(20);
     expect(model.allPlaces).toHaveLength(322);
     expect(model.timeZone).toBe('Europe/Zurich');
@@ -365,5 +367,66 @@ describe.each(bundledResorts.map((item) => [item.name, item]))('indbygget områd
     expect(model.featured.length).toBeGreaterThan(0);
     expect(model.featured.length).toBeLessThanOrEqual(5);
     expect(model.pisteGroups.length).toBeLessThanOrEqual(resort.pistes.length);
+  });
+});
+
+describe('Verbier: rettelser slået op hos liftselskabet (data/resorts/verbier.js)', () => {
+  const model = buildModel(verbier);
+  const lift = (name) => model.lifts.find((item) => item.name === name);
+
+  test('to linjer i OpenStreetMap-udtrækket er ikke skilifter og er taget ud', () => {
+    expect(lift('Mazembroz-Beudon')).toBeUndefined();
+    expect(lift('Fionnay-Plan du Tsenau')).toBeUndefined();
+    expect(lift('Téléski du Dzora')).toBeDefined();
+  });
+
+  test('de vigtigste stationer har de officielle højder', () => {
+    expect(model.elevations[lift('Médran 2').id]).toEqual([1531, 2200]);
+    expect(model.elevations[lift('Funispace').id]).toEqual([2200, 2727]);
+    expect(model.elevations[lift('Mont-Fort').id][1]).toBe(3300);
+    expect(model.elevations[lift('Mont-Gelé').id][1]).toBe(3002);
+    expect(model.weatherLevels.find((level) => level.id === 'top').elevation).toBe(3300);
+  });
+
+  test('uden ski: kun lifter, fodgængere må tage - også en stolelift, men ikke Mont-Gelé', () => {
+    const graph = model.getGraph();
+    const from = model.liftBottom(model.defaultLift);
+    const top = (name) => {
+      const item = lift(name);
+      return item.coordinates[item.coordinates.length - 1];
+    };
+    expect(findRoute(graph, from, top('Mont-Fort'), { skill: 'none' })).not.toBeNull();
+    expect(findRoute(graph, from, top('Mont-Gelé'), { skill: 'none' })).toBeNull();
+    // Alle lift-trin uden ski er mærket som fodgænger-lifter.
+    const route = findRoute(graph, from, model.findPlace('5'), { skill: 'none' });
+    expect(route.steps.filter((step) => step.kind === 'lift').every((step) => step.pedestrian)).toBe(true);
+  });
+
+  test('en upræpareret linje uden navn tegnes og regnes som off-piste', () => {
+    const marked = verbier.pistes.filter((piste) => ['expert', 'extreme'].includes(piste.difficulty));
+    expect(marked.length).toBeGreaterThan(0);
+    for (const piste of marked) {
+      expect(model.pistes.find((item) => item.id === piste.id).difficulty).toBe('freeride');
+    }
+  });
+
+  test('"oppe på bjerget": ikke landsbyen, ikke dalen', () => {
+    expect(model.onMountain(model.findPlace('5'))).toBe(true); // Le Dahu ved La Chaux
+    expect(model.onMountain(model.findPlace('hotel-198'))).toBe(false); // W Verbier i landsbyen
+    const valley = model.allPlaces.find((place) => place.name === 'Café de La Place'); // Le Châble
+    expect(model.onMountain(valley)).toBe(false);
+  });
+
+  test('toppen af kælkebanen er der, hvor man starter', () => {
+    const top = model.pisteTop(model.sledRun);
+    const bottoms = model.sledRun.pistes.flatMap((piste) => [piste.coordinates[0], piste.coordinates[piste.coordinates.length - 1]]);
+    expect(bottoms.some((point) => distanceMeters(point, top) < 1)).toBe(true);
+    // Ved Savoleyres, ikke nede i La Tzoumaz.
+    expect(model.nearestLiftStation(top).meters).toBeLessThan(400);
+  });
+
+  test('nærmeste lift er en bundstation, når den ligger næsten lige så tæt på', () => {
+    // Le Farinet ligger i landsbyen: "ved Médran", ikke "ved toppen af gondolen fra dalen".
+    expect(model.nearestLiftStation(model.findPlace('apres-12'))).toMatchObject({ end: 'bottom' });
   });
 });

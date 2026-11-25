@@ -75,7 +75,10 @@ describe('reachText', () => {
   const way = (id, seconds) => ({ level: { id }, route: route(seconds) });
 
   test('uden ski', () => {
-    expect(reachText(way('none', 1627), 'Médran 2 lift', 'europe')).toBe('27 min without skis from Médran 2 lift');
+    // En gåtur og en tur med lift er begge "uden ski", men ikke det samme.
+    expect(reachText(way('none', 1627), 'Médran 2 lift', 'europe')).toBe('27 min walk from Médran 2 lift');
+    const byLift = { level: { id: 'none' }, route: { totalSeconds: 1627, steps: [{ kind: 'lift' }, { kind: 'walk' }] } };
+    expect(reachText(byLift, 'Médran 2 lift', 'europe')).toBe('27 min by lift from Médran 2 lift - no skiing needed');
   });
 
   test('blå pister - farven følger landet', () => {
@@ -115,10 +118,10 @@ describe('reachText', () => {
     const model = buildModel(verbier);
     const start = defaultStart(model, null);
     const text = (id) => reachText(easiestWay(model, start.point, model.findPlace(id)), start.label, model.convention);
-    expect(text('1')).toMatch(/^\d+ min without skis from Médran 2 lift$/); // Le Rouge
+    expect(text('1')).toMatch(/^\d+ min walk from Médran 2 lift$/); // Le Rouge
     expect(text('2')).toBe('Needs a red piste · 16 min from Médran 2 lift'); // Chez Dany
     expect(text('3')).toMatch(/^\d+ min on blue pistes from Médran 2 lift$/); // Le Carrefour
     expect(text('4')).toMatch(/^Needs a red piste · \d+ min from Médran 2 lift$/); // Cabane Mont Fort
-    expect(text('5')).toMatch(/^\d+ min without skis from Médran 2 lift$/); // Le Dahu
+    expect(text('5')).toMatch(/^\d+ min by lift from Médran 2 lift - no skiing needed$/); // Le Dahu
   });
 });

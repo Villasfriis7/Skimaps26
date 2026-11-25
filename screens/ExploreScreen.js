@@ -17,9 +17,10 @@ import { categoryMeta } from '../data/categoryMeta';
 import { fetchWeather, weatherCodeMeta } from '../data/weather';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
 import { useResort } from '../context/ResortContext';
+import { useLocation } from '../context/LocationContext';
 import { placeCategory } from '../utils/places';
 import { search } from '../utils/search';
-import { formatDistance } from '../utils/geo';
+import { formatDistance, distanceMeters } from '../utils/geo';
 import { styles, colors } from '../styles/styles';
 
 // Vejret hentes igen, når man vender tilbage til fanen eller appen, men
@@ -57,6 +58,7 @@ export default function ExploreScreen({ navigation }) {
   const searchInput = useRef(null);
   const loadingWeather = useRef(false);
   const { savedPlaces, isSaved } = useSavedPlaces();
+  const { location } = useLocation();
 
   const loadWeather = useCallback(() => {
     if (loadingWeather.current) return Promise.resolve();
@@ -94,7 +96,13 @@ export default function ExploreScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const found = useMemo(() => search(model, query), [model, query]);
+  // Står brugeren i skiområdet, vises de nærmeste træf først ("70 m from you").
+  const here = location && distanceMeters(location, model.region) < 30000 ? location : null;
+  const found = useMemo(
+    () => search(model, query, 25, here ? { point: here, label: 'you' } : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [model, query, here?.latitude, here?.longitude]
+  );
 
   // "350 m from Médran 2 lift" - beregnet, ikke skrevet i hånden.
   const nearLiftText = (place) => {
@@ -129,19 +137,22 @@ export default function ExploreScreen({ navigation }) {
     ? `${weather.current.temperature}°C · ${currentMeta.label} · ${weather.current.snowConditions}`
     : '';
   const topNow = weather?.levels?.find((level) => level.id === 'top');
-  const withTop = topNow?.temperature != null ? `${villageText} · Top ${topNow.temperature}°` : null;
+  const withTop = topNow?.temperature != null ? `${villageText} · Top\u00a0${topNow.temperature}°` : null;
   const chipText = withTop && chipTooLong !== withTop ? withTop : villageText;
 
+  // Seks genveje i to rækker. Ikke alle skiområder har toiletter eller en
+  // kælkebane i OpenStreetMap - så står skiudlejning og lifter der i stedet.
   const tiles = [
     { label: 'Restaurants', icon: 'restaurant-outline', onPress: () => openCategory('restaurant') },
+    { label: 'Cafés', icon: 'cafe-outline', onPress: () => openCategory('cafe') },
     { label: 'Après-ski', icon: 'wine-outline', onPress: () => openCategory('apres_ski') },
-    // Ikke alle skiområder har toiletter i OpenStreetMap.
+    { label: 'Hotels', icon: 'bed-outline', onPress: () => openCategory('hotel') },
     model.toilets.length > 0
       ? { label: 'Toilets', icon: 'water-outline', onPress: () => openCategory('toilets') }
-      : { label: 'Hotels', icon: 'bed-outline', onPress: () => openCategory('hotel') },
+      : { label: 'Ski rental', icon: 'pricetag-outline', onPress: () => openCategory('ski_rental') },
     model.sledRun
       ? { label: 'Sled run', icon: 'trending-down-outline', onPress: () => openMap({ focusPisteId: model.sledRun.id }) }
-      : { label: 'Cafés', icon: 'cafe-outline', onPress: () => openCategory('cafe') },
+      : { label: 'Lifts', icon: 'triangle-outline', onPress: () => openCategory('lifts') },
   ];
 
   return (
@@ -154,13 +165,25 @@ export default function ExploreScreen({ navigation }) {
         keyboardDismissMode="on-drag"
         automaticallyAdjustKeyboardInsets
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
         }
       >
-        <View style={styles.brandRow}>
+        <View style={[styles.brandRow, found && { marginBottom: 16 }]}>
           <Ionicons name="snow" size={24} color={colors.primary} />
           <Text style={styles.brandText}>SkiMaps</Text>
         </View>
+        {/* Én linje om, hvad appen kan, som en ny bruger ellers ikke opdager
+            fra forsiden: ruter, og at man selv bestemmer sværhedsgraden. */}
+        {!found && (
+          <Text style={styles.brandTagline}>
+            Find your way on lifts and pistes - never harder than you choose.
+          </Text>
+        )}
 
         {/* Mens man søger, skjules vejr-kortet, så resultaterne får pladsen. */}
         {!found && (
@@ -256,8 +279,17 @@ export default function ExploreScreen({ navigation }) {
                 <Text style={styles.emptyTitle}>Nothing called "{query.trim()}"</Text>
                 <Text style={styles.emptyText}>
                   SkiMaps knows the restaurants, cafés, bars, hotels, ski rentals, lifts and pistes
-                  around {resort.name}. Try a name or a word like "pizza" or "hotel".
+                  around {resort.name} - not shops, spas or activities yet. Try a name or a word like
+                  "pizza" or "hotel".
                 </Text>
+                {/* Mange skriver navnet på et andet skiområde i søgefeltet. */}
+                <TouchableOpacity
+                  style={[styles.smallButton, { marginTop: 16 }]}
+                  onPress={() => navigation.navigate('Resorts')}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.smallButtonText}>Looking for another resort?</Text>
+                </TouchableOpacity>
               </View>
             ) : (
               <View style={styles.group}>
@@ -335,7 +367,7 @@ export default function ExploreScreen({ navigation }) {
                   accessibilityRole="button"
                 >
                   <Ionicons name={tile.icon} size={24} color={colors.primary} />
-                  <Text style={styles.tileLabel} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.3}>
+                  <Text style={styles.tileLabel} numberOfLines={1} maxFontSizeMultiplier={1.4}>
                     {tile.label}
                   </Text>
                 </TouchableOpacity>

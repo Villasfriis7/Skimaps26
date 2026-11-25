@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { weatherCodeMeta, formatCm, formatUpdated } from '../data/weather';
 import { useResort } from '../context/ResortContext';
 import { openLink } from '../utils/links';
+import { useBottomSpace } from '../utils/safeArea';
 import { styles, colors } from '../styles/styles';
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -22,6 +23,7 @@ function weekdayOf(isoDate) {
 // route.params fra ExploreScreen (samme Open-Meteo-kald genbruges, så vi ikke
 // henter data to gange).
 export default function WeatherDetailScreen({ route }) {
+  const bottomSpace = useBottomSpace();
   const { weather } = route.params;
   const { resort } = useResort();
 
@@ -44,7 +46,7 @@ export default function WeatherDetailScreen({ route }) {
   const hasFreezingLevel = mountain.length > 0 && weather.freezingLevelM != null;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.screen} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomSpace }]}>
       <StatusBar style="dark" />
 
       <View style={styles.weatherHero}>
@@ -94,7 +96,8 @@ export default function WeatherDetailScreen({ route }) {
               const meta = weatherCodeMeta(level.code, level.isDay);
               const wind =
                 level.windSpeed != null
-                  ? `Wind ${level.windSpeed} km/h${level.windGusts != null ? `, gusts ${level.windGusts} km/h` : ''}`
+                  ? // Kort nok til én linje: "Wind 14 km/h (gusts 30) · 66 cm snow"
+                    `Wind ${level.windSpeed} km/h${level.windGusts != null ? ` (gusts ${level.windGusts})` : ''}`
                   : level.windGusts != null
                     ? `Gusts ${level.windGusts} km/h`
                     : null;
@@ -156,7 +159,7 @@ export default function WeatherDetailScreen({ route }) {
                   <Ionicons name={meta.icon} size={22} color={colors.primary} />
                 </View>
                 <View style={styles.rowTextWrap}>
-                  <Text style={styles.rowTitle}>{i === 0 ? 'Today' : weekdayOf(d.date)}</Text>
+                  <Text style={styles.rowTitle}>{i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : weekdayOf(d.date)}</Text>
                   <Text style={styles.rowSubtitle}>{details.join(' · ')}</Text>
                 </View>
                 <Text

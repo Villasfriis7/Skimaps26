@@ -400,7 +400,13 @@ export const styles = StyleSheet.create({
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 4,
+  },
+  brandTagline: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.textMuted,
+    marginBottom: 14,
   },
   brandText: {
     fontSize: 20,
@@ -488,14 +494,18 @@ export const styles = StyleSheet.create({
     marginRight: -12,
   },
   // Fire lige brede genveje, der flugter med resten af siden.
+  // Tre genveje pr. række: plads til "Restaurants" ved stor tekst.
   tilesRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     marginHorizontal: -5,
-    marginBottom: 24,
+    marginBottom: 14,
   },
   tile: {
-    flex: 1,
+    flexBasis: '30%',
+    flexGrow: 1,
     minHeight: 76,
+    marginBottom: 10,
     backgroundColor: colors.white,
     borderRadius: 16,
     alignItems: 'center',
@@ -506,7 +516,7 @@ export const styles = StyleSheet.create({
     ...cardShadow,
   },
   tileLabel: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
     color: colors.textDark,
     textAlign: 'center',
@@ -645,6 +655,12 @@ export const styles = StyleSheet.create({
     lineHeight: 21,
     color: colors.textMuted,
     flexShrink: 1,
+  },
+  infoLink: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.primary,
+    marginTop: 2,
   },
 
   // --- Rute -------------------------------------------------------------------
@@ -1128,6 +1144,46 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: -8,
   },
+  // "Now / Then" på rutekortet.
+  mapCardSteps: {
+    marginTop: 10,
+    paddingTop: 8,
+    paddingRight: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  mapCardStep: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 26,
+  },
+  mapCardStepLabel: {
+    width: 40,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    color: colors.textMuted,
+  },
+  mapCardStepIcon: {
+    width: 22,
+    textAlign: 'center',
+    marginRight: 6,
+  },
+  mapCardStepTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.textDark,
+  },
+  mapCardStepTitleNext: {
+    fontWeight: '500',
+  },
+  mapCardStepDetail: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: colors.textMuted,
+  },
   mapCardActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1169,6 +1225,10 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 5,
     paddingHorizontal: 12,
+  },
+  // Luften under bynavnet løfter det fri af markørerne i byen.
+  townLabelWrap: {
+    paddingBottom: 14,
   },
   townLabel: {
     fontSize: 11,
@@ -1269,6 +1329,17 @@ export const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 13,
     fontWeight: '700',
+    includeFontPadding: false, // Android: ellers står tallet for lavt
+  },
+  // I oversigten (de enkelte steder er små prikker).
+  clusterMarkerSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  clusterMarkerTextSmall: {
+    fontSize: 11,
   },
   // Mørk prik med hvid kant - liftstationerne er hvide med mørk kant, så de
   // to må ikke ligne hinanden.
@@ -1289,6 +1360,7 @@ export const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: colors.primary,
+    includeFontPadding: false,
   },
   friendMarker: {
     width: 32,
@@ -1303,6 +1375,33 @@ export const styles = StyleSheet.create({
     color: colors.white,
     fontSize: 14,
     fontWeight: '800',
+    includeFontPadding: false,
+  },
+  friendMarkerSmall: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+  },
+  friendMarkerTextSmall: {
+    fontSize: 10,
+  },
+  // Brugerens egen position: blå prik i en lys ring, over alle andre markører.
+  youHalo: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(21,101,192,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  youDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#1565c0',
+    borderWidth: 3,
+    borderColor: colors.white,
   },
   // Ring om den valgte markør.
   focusRing: {

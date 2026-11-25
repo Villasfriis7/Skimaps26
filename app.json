@@ -9,7 +9,7 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "SkiMaps shows your position on the ski map so you can see where you are in relation to lifts and pistes."
+        "NSLocationWhenInUseUsageDescription": "SkiMaps shows where you are on the map and how far it is to places, lifts and pistes around you. Your location stays on this phone."
       }
     },
     "android": {
@@ -32,7 +32,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "SkiMaps shows your position on the ski map so you can see where you are in relation to lifts and pistes."
+          "locationWhenInUsePermission": "SkiMaps shows where you are on the map and how far it is to places, lifts and pistes around you. Your location stays on this phone."
         }
       ],
       "expo-status-bar"

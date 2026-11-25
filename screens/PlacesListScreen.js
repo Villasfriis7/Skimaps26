@@ -10,8 +10,9 @@ import { placeCategory } from '../utils/places';
 import { findRoute } from '../utils/routing';
 import { defaultStart } from '../utils/reach';
 import { skillLabel } from '../utils/pistes';
-import { distanceMeters, formatDistance } from '../utils/geo';
+import { distanceMeters, formatDistance, formatDuration } from '../utils/geo';
 import { isOpenNow } from '../utils/openingHours';
+import { useBottomSpace } from '../utils/safeArea';
 import { styles, colors } from '../styles/styles';
 
 // "Hvor kan vi spise?" som en liste i stedet for et kort fuldt af prikker:
@@ -20,6 +21,11 @@ import { styles, colors } from '../styles/styles';
 // Filtrene "Without skis" og "Blue pistes" bruger rutefindingen: de viser kun
 // steder, man kan nå fra sin position (eller fra Médran) uden at skulle ned
 // ad noget sværere. Det er spørgsmålet, en begynder eller en uden ski har.
+// Med et af dem slået til står rutens tid i hver række, og listen sorteres
+// efter den - så er "24 min, 2 lifts" svaret, ikke fugleflugt.
+//
+// "On the mountain" skjuler landsbyens steder: "hvor kan vi spise frokost på
+// pisten?" druknede ellers i de tyve restauranter omkring hotellet.
 const reachFilters = [
   { id: 'all', label: 'All', icon: 'apps-outline' },
   { id: 'none', label: 'Without skis', icon: 'walk-outline' },
@@ -28,10 +34,12 @@ const reachFilters = [
 ];
 
 export default function PlacesListScreen({ navigation, route }) {
+  const bottomSpace = useBottomSpace();
   const { category } = route.params;
   const meta = categoryMeta[category];
   const { location } = useLocation();
   const [reach, setReach] = useState('all');
+  const [mountainOnly, setMountainOnly] = useState(false);
   const { model } = useResort();
   const { isSaved } = useSavedPlaces();
   const { allPlaces } = model;
@@ -59,13 +67,27 @@ export default function PlacesListScreen({ navigation, route }) {
   );
 
   const shown = useMemo(
-    () =>
-      reach === 'all'
-        ? places
-        : places.filter(({ place }) => findRoute(graph, start.point, place, { skill: reach, convention: model.convention }) !== null),
+    () => {
+      const wanted = mountainOnly ? places.filter(({ place }) => model.onMountain(place)) : places;
+      if (reach === 'all') return wanted;
+      return wanted
+        .map((item) => ({
+          ...item,
+          way: findRoute(graph, start.point, item.place, { skill: reach, convention: model.convention }),
+        }))
+        .filter((item) => item.way !== null)
+        .sort((a, b) => a.way.totalSeconds - b.way.totalSeconds);
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [places, reach, graph, start.point.latitude, start.point.longitude]
+    [places, reach, mountainOnly, graph, start.point.latitude, start.point.longitude]
   );
+  // Vis kun "On the mountain", hvor det giver mening: kategorien skal have
+  // steder både i byen og på bjerget.
+  const mountainCount = useMemo(
+    () => places.filter(({ place }) => model.onMountain(place)).length,
+    [places, model]
+  );
+  const showMountainChip = mountainCount > 0 && mountainCount < places.length;
 
   const showOnMap = () =>
     navigation.popTo('MainTabs', {
@@ -93,10 +115,26 @@ export default function PlacesListScreen({ navigation, route }) {
             </TouchableOpacity>
           );
         })}
+        {showMountainChip ? (
+          <TouchableOpacity
+            style={[styles.chip, mountainOnly && styles.chipActive]}
+            onPress={() => setMountainOnly((on) => !on)}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: mountainOnly }}
+          >
+            <Ionicons
+              name={mountainOnly ? 'checkmark' : 'triangle-outline'}
+              size={16}
+              color={mountainOnly ? colors.white : colors.textDark}
+            />
+            <Text style={[styles.chipText, mountainOnly && styles.chipTextActive]}>On the mountain</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
       <Text style={[styles.screenSubtitle, { marginTop: 0, marginBottom: 12 }]}>
-        {shown.length} {shown.length === 1 ? meta.singular.toLowerCase() : meta.label.toLowerCase()} · nearest to{' '}
-        {originLabel} first
+        {shown.length} {shown.length === 1 ? meta.singular.toLowerCase() : meta.label.toLowerCase()}
+        {mountainOnly ? ' on the mountain' : ''} ·{' '}
+        {reach === 'all' ? `nearest to ${originLabel} first` : 'quickest to reach first'}
         {reach === 'none' ? ` · reachable from ${start.label} on foot and by gondola` : ''}
         {reach === 'easy' ? ` · reachable from ${start.label} on ${easyColor.toLowerCase()} pistes or easier` : ''}
       </Text>
@@ -104,7 +142,14 @@ export default function PlacesListScreen({ navigation, route }) {
   );
 
   const renderItem = ({ item, index }) => {
-    const { place, meters, open } = item;
+    const { place, meters, open, way } = item;
+    const lifts = way ? way.steps.filter((step) => step.kind === 'lift').length : 0;
+    // Med et filter slået til: rutens tid fra startpunktet i stedet for fugleflugt.
+    const reachLine = way
+      ? way.steps.length === 0
+        ? 'Right here'
+        : `${formatDuration(way.totalSeconds)} from ${start.label}${lifts ? ` · ${lifts} ${lifts === 1 ? 'lift' : 'lifts'}` : ' · on foot'}`
+      : `${formatDistance(meters)} from ${originLabel}`;
     const first = index === 0;
     const last = index === shown.length - 1;
     return (
@@ -124,7 +169,7 @@ export default function PlacesListScreen({ navigation, route }) {
         <View style={styles.rowTextWrap}>
           <Text style={styles.rowTitle}>{place.name}</Text>
           <Text style={styles.rowSubtitle}>
-            {formatDistance(meters)} from {originLabel}
+            {reachLine}
             {open !== null ? ' · ' : ''}
             {open !== null ? (
               <Text style={open ? styles.openNow : styles.closedNow}>{open ? 'Open now' : 'Closed now'}</Text>
@@ -155,10 +200,10 @@ export default function PlacesListScreen({ navigation, route }) {
           <View style={styles.emptyState}>
             <Ionicons name={meta.icon} size={40} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>
-              {reach === 'all' ? `No ${meta.label.toLowerCase()} in ${model.name}` : 'Nothing within reach'}
+              {reach === 'all' && !mountainOnly ? `No ${meta.label.toLowerCase()} in ${model.name}` : 'Nothing within reach'}
             </Text>
             <Text style={styles.emptyText}>
-              {reach === 'all'
+              {reach === 'all' && !mountainOnly
                 ? 'OpenStreetMap has none listed for this ski area.'
                 : `No ${meta.label.toLowerCase()} can be reached from ${start.label} this way. Try "All".`}
             </Text>
@@ -172,7 +217,7 @@ export default function PlacesListScreen({ navigation, route }) {
         }
         showsVerticalScrollIndicator={false}
         style={styles.listBleed}
-        contentContainerStyle={[styles.listBleedContent, { paddingTop: 16 }]}
+        contentContainerStyle={[styles.listBleedContent, { paddingTop: 16, paddingBottom: bottomSpace }]}
         initialNumToRender={14}
       />
     </View>

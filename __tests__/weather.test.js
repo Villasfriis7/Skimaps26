@@ -114,7 +114,7 @@ describe('fetchWeather', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, options] = fetchMock.mock.calls[0];
     expect(url).toMatch(/^https:\/\/api\.open-meteo\.com\/v1\/forecast\?latitude=46\.0961&longitude=7\.2286&/);
-    expect(url).toContain('current=temperature_2m,weather_code,wind_speed_10m,snowfall,relative_humidity_2m,snow_depth,is_day');
+    expect(url).toContain('current=temperature_2m,weather_code,wind_speed_10m,wind_gusts_10m,snowfall,relative_humidity_2m,snow_depth,is_day,freezing_level_height');
     expect(url).toContain('daily=weather_code,temperature_2m_max,temperature_2m_min,snowfall_sum,precipitation_probability_max');
     expect(url).toContain('timezone=auto');
     expect(url).toContain('forecast_days=6');

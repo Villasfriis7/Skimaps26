@@ -42,7 +42,7 @@ export default function PartnersScreen({ navigation, route }) {
   const showCode = (partner) => {
     Alert.alert(
       `Example code: ${partner.code}`,
-      `${partner.name} is not a real SkiMaps partner yet, so the code will not work in the shop. This shows how an offer will look.`
+      `In the finished app you show this code when you pay. ${partner.name} is not a SkiMaps partner yet, so it will not work today - this is an example of how an offer will look.`
     );
   };
 

@@ -31,13 +31,8 @@ describe('phoneUrl', () => {
     expect(phoneUrl('027 771 25 24')).toBe('tel:0277712524');
   });
 
-  // KENDT FEJL (utils/links.js:17): "(0)" i et internationalt nummer betyder
-  // "tast kun nullet, når du ringer inden for landet". phoneUrl beholder
-  // nullet, så "+81 (0)136-23-1432" bliver til tel:+810136231432, som ikke er
-  // et gyldigt nummer. Fire steder i Niseko (data/resorts/niseko.json) har
-  // deres nummer skrevet sådan. Når fejlen er rettet, "fejler" denne test -
-  // lav den så om til en almindelig test().
-  test.failing('et "(0)" efter landekoden skal ikke med i nummeret', () => {
+  // "(0)" i et internationalt nummer tastes kun inden for landet (fire steder i Niseko).
+  test('et "(0)" efter landekoden skal ikke med i nummeret', () => {
     expect(phoneUrl('+81 (0)136-23-1432')).toBe('tel:+81136231432');
     expect(phoneUrl('+81(0)136 555 122')).toBe('tel:+81136555122');
   });

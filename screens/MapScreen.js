@@ -7,6 +7,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  PixelRatio,
   Keyboard,
   Linking,
   ActivityIndicator,
@@ -19,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import MapView, { Polyline, Circle, Marker, UrlTile } from 'react-native-maps';
 import { categoryMeta } from '../data/categoryMeta';
 import { useLocation } from '../context/LocationContext';
+import { describeStep, routeProgress } from '../utils/routeSteps';
 import { useRoute } from '../context/RouteContext';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
 import { useResort } from '../context/ResortContext';
@@ -29,6 +31,7 @@ import {
   pisteColor,
   pisteLegend,
   liftTypeLabels,
+  shortDifficulty,
   OFF_PISTE_COLOR,
   UNKNOWN_PISTE_COLOR,
 } from '../utils/pistes';
@@ -63,6 +66,15 @@ const allOff = Object.fromEntries(filterChips.map((chip) => [chip.id, false]));
 // Default: restauranter/caféer, toiletter og venner vist med det samme. De
 // øvrige (hoteller er langt de fleste) slås til manuelt for at holde kortet roligt.
 const defaultActive = { ...allOff, restaurant: true, cafe: true, toilets: true, friends: true };
+
+// ANDROID (Google Maps) tegner tre ting anderledes end iOS (Apple Maps):
+//  - stiplede linjer måles i skærmpunkter og ikke i dp, og med runde ender
+//    bliver hver streg til en prik - derfor ganges mønsteret op, og enderne
+//    er flade på de stiplede linjer;
+//  - cirklers kant måles også i skærmpunkter;
+//  - kortfliser hentes i halv opløsning, medmindre man beder om det dobbelte.
+const ANDROID = Platform.OS === 'android';
+const dashFor = (dash) => (dash && ANDROID ? dash.map((n) => n * PixelRatio.get()) : dash);
 
 const LIFT_COLOR = '#2b3a42';
 const LIFT_COLOR_ON_SATELLITE = '#ffffff'; // mørke lifter forsvinder på et satellitfoto
@@ -252,7 +264,7 @@ function placeSubtitle(model, place) {
 
 // Ét info-kort nederst på kortet. Alle typer (sted, lift, pist, ven, toilet,
 // rute) bruger samme opbygning: titel + luk-knap øverst, handlinger nederst.
-function MapCard({ icon, iconColor, title, subtitle, accent, onClose, closeLabel, children }) {
+function MapCard({ icon, iconColor, title, subtitle, accent, onClose, closeLabel, body, children }) {
   return (
     <View style={[styles.mapCard, accent && { borderLeftWidth: 4, borderLeftColor: accent }]}>
       <View style={styles.mapCardTop}>
@@ -276,7 +288,61 @@ function MapCard({ icon, iconColor, title, subtitle, accent, onClose, closeLabel
           <Ionicons name="close" size={22} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
+      {body || null}
       {children ? <View style={styles.mapCardActions}>{children}</View> : null}
+    </View>
+  );
+}
+
+// "Nu" og "derefter" på rutekortet, så man kan følge ruten uden at åbne
+// trin-listen med handsker på. Står man ikke på ruten (eller kender vi ikke
+// positionen), vises de to første trin som "First" og "Then".
+function RouteNextSteps({ route, progress, convention }) {
+  if (progress.arrived) {
+    return (
+      <View style={styles.mapCardSteps}>
+        <View style={styles.mapCardStep}>
+          <Ionicons name="flag" size={18} color={colors.route} style={styles.mapCardStepIcon} />
+          <Text style={styles.mapCardStepTitle}>You have arrived</Text>
+        </View>
+      </View>
+    );
+  }
+  const now = route.steps[progress.index];
+  const next = route.steps[progress.index + 1];
+  if (!now) return null;
+  const line = (step, label, strong) => {
+    const info = describeStep(step, convention);
+    return (
+      <View
+        style={styles.mapCardStep}
+        accessible
+        accessibilityLabel={`${label}: ${info.title}, ${info.subtitle}`}
+      >
+        <Text style={styles.mapCardStepLabel} maxFontSizeMultiplier={1.3}>
+          {label}
+        </Text>
+        <Ionicons
+          name={info.icon}
+          size={step.kind === 'piste' ? 14 : 18}
+          color={info.color || (step.kind === 'lift' ? colors.primary : colors.textMuted)}
+          style={styles.mapCardStepIcon}
+        />
+        <Text
+          style={[styles.mapCardStepTitle, !strong && styles.mapCardStepTitleNext]}
+          numberOfLines={1}
+          maxFontSizeMultiplier={1.3}
+        >
+          {info.title}
+          <Text style={styles.mapCardStepDetail}>{`  ${info.subtitle}`}</Text>
+        </Text>
+      </View>
+    );
+  };
+  return (
+    <View style={styles.mapCardSteps}>
+      {line(now, progress.onRoute ? 'Now' : 'First', true)}
+      {next ? line(next, 'Then', false) : null}
     </View>
   );
 }
@@ -367,7 +433,10 @@ export default function MapScreen({ navigation, route }) {
   // hver gang, fordi klyngerne af steder regnes ud fra det. Linjerne afhænger
   // kun af `level` (tre trin) og tegnes derfor ikke om ved hver panorering.
   const lastRegion = useRef(resortRegion);
-  const onRegionChangeComplete = (next) => {
+  // Har brugeren selv flyttet kortet? Så flytter vi det ikke for dem.
+  const userMoved = useRef(false);
+  const onRegionChangeComplete = (next, details) => {
+    if (details?.isGesture) userMoved.current = true;
     lastRegion.current = next;
     setLevel(zoomLevelFor(next));
     setRegion(next);
@@ -383,6 +452,16 @@ export default function MapScreen({ navigation, route }) {
   // igen bagefter - og dermed ender øverst.
   const [overlayEpoch, setOverlayEpoch] = useState(0);
   const routeShown = Boolean(activeRoute);
+
+  // Hvor på ruten står brugeren? Regnes om, hver gang positionen flytter sig.
+  const lastProgress = useRef({ route: null, index: 0 });
+  const progress = useMemo(() => {
+    if (!activeRoute) return null;
+    const previous = lastProgress.current.route === activeRoute ? lastProgress.current.index : 0;
+    const next = routeProgress(activeRoute, location, previous);
+    lastProgress.current = { route: activeRoute, index: next.onRoute ? next.index : 0 };
+    return next;
+  }, [activeRoute, location]);
   useEffect(() => {
     setOverlayEpoch((epoch) => epoch + 1);
   }, [level, baseMap, routeShown]);
@@ -408,7 +487,9 @@ export default function MapScreen({ navigation, route }) {
 
   // Flyt kortet - eller husk udsnittet, hvis kortet ikke er klar endnu (første
   // gang fanen åbnes via en genvej fra en anden skærm).
+  const lastMove = useRef(null);
   const moveTo = useCallback((next) => {
+    lastMove.current = { region: next, at: Date.now() };
     if (mapReady.current && mapRef.current) {
       mapRef.current.animateToRegion(next, 600);
     } else {
@@ -416,12 +497,31 @@ export default function MapScreen({ navigation, route }) {
     }
   }, []);
 
+  // "Hvor er jeg?" er det første, man vil vide. Står brugeren i skiområdet,
+  // åbner kortet derfor omkring dem i stedet for på hele området - én gang,
+  // og kun hvis de ikke selv har flyttet kortet eller er sendt hen til noget
+  // bestemt fra en anden skærm. Oversigten ligger bag "Show the whole ski area".
+  const autoCentred = useRef(false);
+  useEffect(() => {
+    if (autoCentred.current || !location) return;
+    autoCentred.current = true;
+    const inside =
+      Math.abs(location.latitude - resortRegion.latitude) <= resortRegion.latitudeDelta / 2 &&
+      Math.abs(location.longitude - resortRegion.longitude) <= resortRegion.longitudeDelta / 2;
+    if (inside && !userMoved.current && !lastMove.current && !selected) moveTo(regionAround(location, 0.03));
+    // Kun første gang positionen kendes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location]);
+
+  // Android bygger kortet forfra, hver gang man vender tilbage til fanen, og
+  // kalder onMapReady igen. Er kortet lige blevet bedt om at flytte sig (en
+  // genvej fra en anden skærm), gentages flytningen, så den ikke går tabt.
   const onMapReady = () => {
     mapReady.current = true;
-    if (pendingRegion.current) {
-      mapRef.current?.animateToRegion(pendingRegion.current, 0);
-      pendingRegion.current = null;
-    }
+    const recent = lastMove.current && Date.now() - lastMove.current.at < 2000 ? lastMove.current.region : null;
+    const target = pendingRegion.current || recent;
+    if (target) mapRef.current?.animateToRegion(target, 0);
+    pendingRegion.current = null;
   };
 
   // Vælg noget på kortet. `lastOverlayPress` fortæller onMapPress, at trykket
@@ -435,7 +535,11 @@ export default function MapScreen({ navigation, route }) {
   // Et tryk på tomt kort lukker info-kort, signaturforklaring og tastatur.
   // (iOS sender også kortets onPress lige efter et tryk på en linje eller
   // markør - de tryk springes over.)
-  const onMapPress = () => {
+  // På Android fortæller kortet selv, hvad der blev ramt: kun 'press' er
+  // et tryk på tomt kort.
+  const onMapPress = (event) => {
+    const action = event?.nativeEvent?.action;
+    if (ANDROID && action && action !== 'press') return;
     if (Date.now() - lastOverlayPress.current < 400) return;
     setSelected(null);
     setLegendOpen(false);
@@ -579,7 +683,12 @@ export default function MapScreen({ navigation, route }) {
   };
 
   // --- Søgning direkte på kortet -------------------------------------------
-  const found = useMemo(() => search(model, query, 20), [model, query]);
+  const here = location && distanceMeters(location, resortRegion) < 30000 ? location : null;
+  const found = useMemo(
+    () => search(model, query, 20, here ? { point: here, label: 'you' } : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [model, query, here?.latitude, here?.longitude]
+  );
 
   const closeSearch = () => {
     setQuery('');
@@ -645,8 +754,8 @@ export default function MapScreen({ navigation, route }) {
             coordinates={piste.coordinates}
             strokeColor={withAlpha(style.color, lineAlpha)}
             strokeWidth={style.width}
-            lineDashPattern={style.dash}
-            lineCap="round"
+            lineDashPattern={dashFor(style.dash)}
+            lineCap={style.dash && ANDROID ? 'butt' : 'round'}
             lineJoin="round"
             zIndex={1}
             tappable
@@ -693,7 +802,7 @@ export default function MapScreen({ navigation, route }) {
           radius={STATION_RADIUS[level]}
           fillColor={colors.white}
           strokeColor={LIFT_COLOR}
-          strokeWidth={2}
+          strokeWidth={ANDROID ? 2 * PixelRatio.get() : 2}
           zIndex={3}
         />
       )),
@@ -838,7 +947,7 @@ export default function MapScreen({ navigation, route }) {
           onPress={() => select('place', place)}
         >
           {/* Den gennemsigtige ramme gør trykfladen større end selve prikken. */}
-          <View style={compact ? styles.markerHitSmall : styles.markerHit}>
+          <View style={compact ? styles.markerHitSmall : styles.markerHit} collapsable={false}>
             {compact ? (
               <View style={[styles.placeDotSmall, { backgroundColor: color }]} />
             ) : (
@@ -863,9 +972,20 @@ export default function MapScreen({ navigation, route }) {
         tracksViewChanges={false}
         onPress={() => onClusterPress(cluster)}
       >
-        <View style={styles.markerHit}>
-          <View style={[styles.clusterMarker, cluster.count >= 10 && styles.clusterMarkerLarge]}>
-            <Text style={styles.clusterMarkerText} maxFontSizeMultiplier={1.2}>
+        <View style={styles.markerHit} collapsable={false}>
+          <View
+            style={[
+              styles.clusterMarker,
+              cluster.count >= 10 && styles.clusterMarkerLarge,
+              // I oversigten er de enkelte steder små prikker - så skal
+              // klyngerne heller ikke fylde.
+              compact && styles.clusterMarkerSmall,
+            ]}
+          >
+            <Text
+              style={[styles.clusterMarkerText, compact && styles.clusterMarkerTextSmall]}
+              maxFontSizeMultiplier={1.2}
+            >
               {cluster.count > 99 ? '99+' : cluster.count}
             </Text>
           </View>
@@ -887,7 +1007,7 @@ export default function MapScreen({ navigation, route }) {
         tracksViewChanges={false}
         onPress={() => select('toilet', wc)}
       >
-        <View style={compact ? styles.markerHitSmall : styles.markerHit}>
+        <View style={compact ? styles.markerHitSmall : styles.markerHit} collapsable={false}>
           {compact ? (
             <View style={[styles.placeDotSmall, styles.toiletDotSmall]} />
           ) : (
@@ -907,21 +1027,26 @@ export default function MapScreen({ navigation, route }) {
       active.friends
         ? friends.map((friend) => (
             <Marker
-              key={friend.id}
+              key={`${friend.id}-${level === 'far' ? 'small' : 'full'}`}
               coordinate={{ latitude: friend.latitude, longitude: friend.longitude }}
               anchor={{ x: 0.5, y: 0.5 }}
               zIndex={14}
               tracksViewChanges={false}
               onPress={() => select('friend', friend)}
             >
-              <View style={styles.markerHit}>
+              {/* I oversigten er vennerne små, så de ikke dækker lifterne. */}
+              <View style={level === 'far' ? styles.markerHitSmall : styles.markerHit} collapsable={false}>
                 <View
                   style={[
                     styles.friendMarker,
+                    level === 'far' && styles.friendMarkerSmall,
                     { backgroundColor: friend.color, opacity: friend.online ? 1 : 0.6 },
                   ]}
                 >
-                  <Text style={styles.friendMarkerText} maxFontSizeMultiplier={1.2}>
+                  <Text
+                    style={[styles.friendMarkerText, level === 'far' && styles.friendMarkerTextSmall]}
+                    maxFontSizeMultiplier={1.2}
+                  >
                     {friend.initials}
                   </Text>
                 </View>
@@ -929,7 +1054,7 @@ export default function MapScreen({ navigation, route }) {
             </Marker>
           ))
         : null,
-    [active.friends, select]
+    [active.friends, select, level]
   );
 
   // Navneskilte: lifter altid, når man er zoomet ind; pister kun dem i udsnittet.
@@ -994,14 +1119,36 @@ export default function MapScreen({ navigation, route }) {
       );
     }
     if (kind === 'piste') {
+      // En pist eller kælkebane er ikke en blindgyde: man kan få en rute til
+      // dens øverste ende - der, hvor man starter.
+      const sled = item.kind === 'sled';
+      const top = sled || item.kind === 'downhill' ? model.pisteTop(item) : null;
+      const topLift = top ? nearestLiftStation(top) : null;
+      const startsAt =
+        sled && topLift && topLift.meters < 400 ? `\nStarts by the ${topLift.lift.name} lift` : '';
       return (
         <MapCard
           icon="ellipse"
           iconColor={styleOf(item.pistes[0], 'near').color}
           title={item.name || 'Unnamed piste'}
-          subtitle={pisteSubtitle(model, item)}
+          subtitle={`${pisteSubtitle(model, item)}${startsAt}`}
           onClose={close}
-        />
+        >
+          {top ? (
+            <CardButton
+              primary
+              icon="navigate"
+              label={sled ? 'Route to the start' : 'Route to the top'}
+              onPress={() =>
+                routeTo({
+                  id: `piste-${item.id}`,
+                  name: sled ? 'the start of the sled run' : `the top of ${item.name || 'this piste'}`,
+                  ...top,
+                })
+              }
+            />
+          ) : null}
+        </MapCard>
       );
     }
     if (kind === 'place') {
@@ -1033,7 +1180,9 @@ export default function MapScreen({ navigation, route }) {
         <MapCard
           icon="person-circle-outline"
           title={item.name}
-          subtitle={`${item.status} · ${item.online ? 'online' : 'offline'}${away}`}
+          // Vennerne er eksempler, indtil appen har login - det skal stå der,
+          // hvor man møder dem, ikke kun på Friends-fanen.
+          subtitle={`Example friend · ${item.status} · ${item.online ? 'online' : 'offline'}${away}`}
           onClose={close}
         >
           <CardButton
@@ -1075,6 +1224,20 @@ export default function MapScreen({ navigation, route }) {
   const searching = found !== null;
   const filtersChanged = filterChips.some((chip) => active[chip.id] !== defaultActive[chip.id]);
 
+  // Er kortet flyttet væk fra skiområdet eller zoomet helt ud? Så tilbyder
+  // "Reset map" vejen hjem.
+  const farFromResort =
+    Math.abs(region.latitude - resortRegion.latitude) > resortRegion.latitudeDelta ||
+    Math.abs(region.longitude - resortRegion.longitude) > resortRegion.longitudeDelta ||
+    region.latitudeDelta > resortRegion.latitudeDelta * 3;
+  // Én knap tilbage til det normale: filtre, terrænkort og - hvis man er
+  // faret vild - skiområdet i billedet.
+  const resetMap = () => {
+    setActive(defaultActive);
+    if (baseMap === 'satellite') toggleBaseMap();
+    if (farFromResort) moveTo(resortRegion);
+  };
+
   const showWholeArea = () => {
     setLegendOpen(false);
     moveTo(resortRegion);
@@ -1091,14 +1254,18 @@ export default function MapScreen({ navigation, route }) {
           style={styles.map}
           initialRegion={lastRegion.current}
           mapType={nativeMapType[baseMap]}
-          showsUserLocation={permission === 'granted'}
+          showsUserLocation={permission === 'granted' && !location}
           showsMyLocationButton={false}
           showsPointsOfInterests={false}
           showsBuildings={false}
           showsTraffic={false}
-          showsCompass
+          showsCompass={false}
           toolbarEnabled={false}
           moveOnMarkerPress={false}
+          // Kortet kan ikke drejes eller vippes: nord er altid op, som på et
+          // pistekort, og zoom-niveauet kan regnes ud fra udsnittet.
+          rotateEnabled={false}
+          pitchEnabled={false}
           minZoomLevel={9}
           maxZoomLevel={18}
           onMapReady={onMapReady}
@@ -1108,7 +1275,13 @@ export default function MapScreen({ navigation, route }) {
           {/* Rækkefølgen her er lagenes rækkefølge, nederst først. zIndex gør
               det samme på Android; på iOS er det rækkefølgen, der tæller. */}
           {baseMap === 'terrain' && (
-            <UrlTile urlTemplate={snowTerrain} maximumZ={SNOW_MAX_ZOOM} tileSize={256} zIndex={-3} />
+            <UrlTile
+              urlTemplate={snowTerrain}
+              maximumZ={SNOW_MAX_ZOOM}
+              tileSize={256}
+              doubleTileSize={ANDROID}
+              zIndex={-3}
+            />
           )}
           {baseMap === 'terrain' && (
             <UrlTile urlTemplate={swissRelief} maximumZ={MAX_TILE_ZOOM} tileSize={256} zIndex={-2} />
@@ -1150,16 +1323,18 @@ export default function MapScreen({ navigation, route }) {
               <Marker
                 key={town.id}
                 coordinate={{ latitude: town.latitude, longitude: town.longitude }}
-                // Navnet står lige over byens punkt, så klyngen af markører
-                // i byen ikke dækker det.
-                anchor={{ x: 0.5, y: 1.9 }}
+                // Navnet står lige over byens punkt (luften ligger i rammen),
+                // så klyngen af markører i byen ikke dækker det.
+                anchor={{ x: 0.5, y: 1 }}
                 zIndex={6}
                 tracksViewChanges={false}
                 onPress={onMapPress}
               >
-                <Text style={styles.townLabel} maxFontSizeMultiplier={1.2}>
-                  {town.name}
-                </Text>
+                <View style={styles.townLabelWrap} collapsable={false}>
+                  <Text style={styles.townLabel} maxFontSizeMultiplier={1.2}>
+                    {town.name}
+                  </Text>
+                </View>
               </Marker>
             ))}
 
@@ -1216,6 +1391,24 @@ export default function MapScreen({ navigation, route }) {
               </View>
             </Marker>
           )}
+
+          {/* Brugeren selv. Telefonens egen blå prik ligger UNDER appens
+              markører og forsvandt bag et toilet- eller café-ikon, lige når
+              man stod ved liften. Vores egen ligger øverst. */}
+          {permission === 'granted' && location ? (
+            <Marker
+              coordinate={location}
+              anchor={{ x: 0.5, y: 0.5 }}
+              zIndex={40}
+              tracksViewChanges={false}
+              tappable={false}
+              accessibilityLabel="Your location"
+            >
+              <View style={styles.youHalo} collapsable={false}>
+                <View style={styles.youDot} />
+              </View>
+            </Marker>
+          ) : null}
 
           {/* Rutens start og mål */}
           {activeRoute && activeRoute.coordinates.length > 1 && (
@@ -1333,16 +1526,16 @@ export default function MapScreen({ navigation, route }) {
                 contentContainerStyle={styles.mapChipsContent}
                 keyboardShouldPersistTaps="handled"
               >
-                {filtersChanged ? (
+                {filtersChanged || baseMap === 'satellite' || farFromResort ? (
                   <TouchableOpacity
                     style={[styles.chip, styles.chipFloating]}
-                    onPress={() => setActive(defaultActive)}
+                    onPress={resetMap}
                     accessibilityRole="button"
-                    accessibilityLabel="Reset the filters"
+                    accessibilityLabel="Reset the map: standard filters, terrain map and the ski area in view"
                   >
                     <Ionicons name="refresh" size={16} color={colors.textDark} />
                     <Text style={styles.chipText} maxFontSizeMultiplier={1.3}>
-                      Reset
+                      Reset map
                     </Text>
                   </TouchableOpacity>
                 ) : null}
@@ -1361,6 +1554,9 @@ export default function MapScreen({ navigation, route }) {
                       <Text style={[styles.chipText, on && styles.chipTextActive]} maxFontSizeMultiplier={1.3}>
                         {chip.label}
                       </Text>
+                      {/* Fluebenet viser, at filtret er TIL - en mørk knap alene
+                          blev læst som en genvej, og et tryk skjulte stederne. */}
+                      {on ? <Ionicons name="checkmark" size={15} color={colors.white} style={{ marginLeft: 4 }} /> : null}
                     </TouchableOpacity>
                   );
                 })}
@@ -1458,9 +1654,20 @@ export default function MapScreen({ navigation, route }) {
                 iconColor={colors.route}
                 accent={colors.route}
                 title={`To ${activeRoute.destination.name}`}
-                subtitle={`${formatDuration(activeRoute.totalSeconds)} · ${formatDistance(activeRoute.totalMeters)} · from ${activeRoute.startLabel}`}
+                subtitle={
+                  progress.arrived
+                    ? `From ${activeRoute.startLabel}`
+                    : progress.onRoute && progress.index > 0
+                      ? `About ${formatDuration(progress.remainingSeconds)} left · step ${progress.index + 1} of ${activeRoute.steps.length}`
+                      : `${formatDuration(activeRoute.totalSeconds)} · ${formatDistance(activeRoute.totalMeters)} · ${
+                          activeRoute.hardest
+                            ? `hardest piste: ${shortDifficulty(activeRoute.hardest, resort.convention)}`
+                            : `from ${activeRoute.startLabel}`
+                        }`
+                }
                 onClose={clearRoute}
                 closeLabel="End route"
+                body={<RouteNextSteps route={activeRoute} progress={progress} convention={resort.convention} />}
               >
                 <CardButton
                   primary
@@ -1470,6 +1677,7 @@ export default function MapScreen({ navigation, route }) {
                     navigation.navigate('Route', {
                       destination: activeRoute.destination,
                       start: activeRoute.start,
+                      level: activeRoute.skill,
                     })
                   }
                 />

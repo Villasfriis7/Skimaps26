@@ -15,15 +15,12 @@ import { useLocation } from '../context/LocationContext';
 import { useRoute } from '../context/RouteContext';
 import { useResort } from '../context/ResortContext';
 import { findRoute, isOnNetwork, skillLevels } from '../utils/routing';
-import {
-  liftTypeLabels,
-  difficultyLabel,
-  shortDifficulty,
-  pisteColor,
-  skillLabel,
-  skillColor,
-} from '../utils/pistes';
+import { liftTypeLabels, shortDifficulty, skillLabel, skillColor } from '../utils/pistes';
 import { distanceMeters, formatDistance, formatDuration } from '../utils/geo';
+import { describeStep } from '../utils/routeSteps';
+import { easiestWay } from '../utils/reach';
+import { openLink, walkingLink } from '../utils/links';
+import { useBottomSpace } from '../utils/safeArea';
 import { styles, colors } from '../styles/styles';
 
 // "Gondola · 1,532 → 2,200 m" - højderne skiller lifter med samme navn ad
@@ -35,58 +32,19 @@ function liftDetails(lift, elevations) {
   return `${type} · ${Math.min(a, b)} → ${Math.max(a, b)} m`;
 }
 
-// Sværeste pist på ruten - det, en nervøs skiløber vil vide først.
-const DIFFICULTY_ORDER = ['novice', 'easy', 'intermediate', 'advanced', 'expert', 'extreme', 'freeride'];
-function hardestPiste(steps) {
-  let hardest = null;
-  for (const step of steps) {
-    if (step.kind !== 'piste') continue;
-    if (!hardest || DIFFICULTY_ORDER.indexOf(step.difficulty) > DIFFICULTY_ORDER.indexOf(hardest)) {
-      hardest = step.difficulty;
-    }
-  }
-  return hardest;
-}
-
-// Ét trin i ruten som tekst + ikon.
-function describeStep(step, convention) {
-  const length = formatDistance(step.meters);
-  if (step.kind === 'lift') {
-    return {
-      // Gondoler og kabelbaner kan også tages ned - så skal der stå "down".
-      icon: step.down ? 'arrow-down-circle' : 'arrow-up-circle',
-      color: colors.primary,
-      title: step.down ? `Ride ${step.name} down` : `Take ${step.name}`,
-      subtitle: `${liftTypeLabels[step.liftType] || liftTypeLabels.unknown} · ${length}`,
-    };
-  }
-  if (step.kind === 'piste') {
-    return {
-      icon: 'ellipse',
-      color: pisteColor(step.difficulty, convention),
-      title: step.name ? `Ski ${step.name}` : 'Ski an unnamed piste',
-      subtitle: `${difficultyLabel(step.difficulty, convention)} · ${length}`,
-    };
-  }
-  return {
-    icon: 'walk',
-    color: colors.textMuted,
-    title: `Walk ${length}`,
-    subtitle: 'On foot',
-  };
-}
-
 // Rutefinding via lifter og pister til ét sted (route.params.destination).
 // Brugeren vælger startpunkt (egen GPS-position eller en liftstation) og den
 // sværeste pist, de vil køre. Selve beregningen ligger i utils/routing.js;
 // "Show on map" lægger ruten i RouteContext, så kortet kan tegne den.
 //
 // route.params.start ({ choice, liftId }) bruges, når skærmen åbnes fra
-// kortets rutekort ("Steps"), så den viser samme rute som den, der er tegnet.
+// kortets rutekort ("Steps"), så den viser samme rute som den, der er tegnet;
+// route.params.level er det niveau, den rute blev regnet for.
 export default function RouteScreen({ navigation, route }) {
-  const { destination, start } = route.params;
+  const bottomSpace = useBottomSpace();
+  const { destination, start, level: givenLevel } = route.params;
   const { location, locate } = useLocation();
-  const { setActiveRoute, skill, setSkill } = useRoute();
+  const { setActiveRoute, skill: savedSkill, setSkill } = useRoute();
   const { resort, model } = useResort();
   const { lifts, elevations, liftBottom, defaultLift, convention } = model;
   const graph = model.getGraph();
@@ -108,6 +66,27 @@ export default function RouteScreen({ navigation, route }) {
 
   const startPoint = useMyLocation ? location : liftBottom(startLift);
   const startLabel = useMyLocation ? 'your location' : startLift.name;
+
+  // HVILKET NIVEAU REGNES RUTEN FOR?
+  //  - Brugerens gemte niveau (`savedSkill`), når de har valgt et.
+  //  - Har de aldrig valgt, gætter vi ikke: så vises den letteste vej, der
+  //    findes (ofte "uden ski"), og en linje beder dem vælge.
+  //  - `once` er et niveau, der kun gælder denne ene rute: når man fra en
+  //    blindgyde trykker "Show the route with red pistes", eller når skærmen
+  //    åbnes fra kortets rutekort. Det ændrer ikke det gemte niveau - ellers
+  //    ville ét nysgerrigt tryk gøre alle senere ruter røde.
+  const [once, setOnce] = useState(givenLevel && givenLevel !== savedSkill ? givenLevel : null);
+  const firstTime = savedSkill === null && once === null;
+  const easiest = useMemo(
+    () => (firstTime ? easiestWay(model, startPoint, destination) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [firstTime, model, startPoint.latitude, startPoint.longitude, destination]
+  );
+  const skill = once || savedSkill || easiest?.level.id || 'easy';
+  const chooseSkill = (levelId) => {
+    setOnce(null);
+    setSkill(levelId);
+  };
 
   const result = useMemo(
     () => findRoute(graph, startPoint, destination, { skill, convention }),
@@ -192,13 +171,23 @@ export default function RouteScreen({ navigation, route }) {
     lift.name.toLowerCase().includes(query.trim().toLowerCase())
   );
 
-  const hardest = result ? hardestPiste(result.steps) : null;
+  const hardest = result ? result.hardest : null;
   const liftCount = result ? result.steps.filter((step) => step.kind === 'lift').length : 0;
+  // Har man tilladt sort, og den hurtigste vej kun bruger rød, skal det stå
+  // der - ellers ligner det, at knappen ikke virkede.
+  const hardestLevel = hardest ? skillLevels.findIndex((level) => level.allowed.includes(hardest)) : -1;
+  const easierThanAllowed =
+    result && hardest && skillIndex >= 2 && hardestLevel !== -1 && hardestLevel < skillIndex
+      ? `The fastest way has no ${skillLabel(skill, convention).toLowerCase()} ${skill === 'freeride' ? 'section' : 'piste'}.`
+      : null;
+  // En rute uden lifter og pister er en gåtur - og vores gåture er lige
+  // streger. Så er telefonens kort-app bedre til selve vejen.
+  const walkOnly = result ? result.steps.length > 0 && result.steps.every((step) => step.kind === 'walk') : false;
 
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomSpace }]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
     >
@@ -301,7 +290,7 @@ export default function RouteScreen({ navigation, route }) {
                   <TouchableOpacity
                     key={level.id}
                     style={[styles.chip, styles.chipOnCard, on && styles.chipActive]}
-                    onPress={() => setSkill(level.id)}
+                    onPress={() => chooseSkill(level.id)}
                     accessibilityRole="button"
                     accessibilityState={{ selected: on }}
                   >
@@ -322,6 +311,15 @@ export default function RouteScreen({ navigation, route }) {
                 );
               })}
             </View>
+            <Text style={styles.routeHint}>
+              {firstTime
+                ? 'This is the easiest way there. Choose the hardest piste you are happy to ski - SkiMaps remembers it for your next routes.'
+                : once
+                  ? savedSkill
+                    ? `${skillLabel(once, convention)} is used for this route only. Your level is still ${skillLabel(savedSkill, convention)} - tap a level to change it.`
+                    : `${skillLabel(once, convention)} is used for this route only. Tap a level to make it yours.`
+                  : 'Routes never use anything harder. SkiMaps remembers your choice.'}
+            </Text>
           </>
         ) : null}
       </View>
@@ -337,7 +335,7 @@ export default function RouteScreen({ navigation, route }) {
         <View style={styles.card}>
           <Text style={harderLevel ? styles.cardText : styles.cardTextLast}>{noRouteText}</Text>
           {harderLevel ? (
-            <TouchableOpacity style={styles.buttonSecondary} onPress={() => setSkill(harderLevel.id)}>
+            <TouchableOpacity style={styles.buttonSecondary} onPress={() => setOnce(harderLevel.id)}>
               <Text style={styles.buttonSecondaryText}>
                 Show the route with {skillLabel(harderLevel.id, convention).toLowerCase()} pistes
               </Text>
@@ -359,6 +357,7 @@ export default function RouteScreen({ navigation, route }) {
               {liftCount ? ` · ${liftCount} ${liftCount === 1 ? 'lift' : 'lifts'}` : ''}
               {hardest ? ` · hardest piste: ${shortDifficulty(hardest, convention)}` : ''}
             </Text>
+            {easierThanAllowed ? <Text style={styles.routeSummaryMeta}>{easierThanAllowed}</Text> : null}
           </View>
 
           {/* Hovedhandlingen står over trinene, så man ikke skal scrolle forbi
@@ -367,18 +366,32 @@ export default function RouteScreen({ navigation, route }) {
             <Ionicons name="map-outline" size={18} color={colors.white} style={styles.buttonIcon} />
             <Text style={styles.buttonText}>Show on map</Text>
           </TouchableOpacity>
+          {walkOnly ? (
+            <TouchableOpacity
+              style={[styles.buttonSecondary, { marginBottom: 16 }]}
+              onPress={() => openLink(walkingLink(destination))}
+              accessibilityRole="link"
+            >
+              <Ionicons name="walk-outline" size={18} color={colors.primary} style={styles.buttonIcon} />
+              <Text style={styles.buttonSecondaryText}>Walking directions in Maps</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Trinene som en tidslinje i ét kort: ikonerne i en søjle med en
               streg imellem, så rækkefølgen kan læses med et blik. */}
           <View style={[styles.group, { paddingTop: 14 }]}>
             {result.steps.map((step, index) => {
-              const info = describeStep(step, convention);
+              const info = describeStep(step, convention, elevations);
               const last = index === result.steps.length - 1;
               return (
                 <View key={step.key} style={styles.step}>
                   <View style={styles.stepRail}>
                     <View style={styles.stepIconWrap}>
-                      <Ionicons name={info.icon} size={step.kind === 'piste' ? 18 : 24} color={info.color} />
+                      <Ionicons
+                        name={info.icon}
+                        size={step.kind === 'piste' ? 18 : 24}
+                        color={info.color || (step.kind === 'lift' ? colors.primary : colors.textMuted)}
+                      />
                     </View>
                     <View style={[styles.stepConnector, last && styles.stepConnectorHidden]} />
                   </View>
@@ -393,7 +406,8 @@ export default function RouteScreen({ navigation, route }) {
           </View>
 
           <Text style={styles.footnote}>
-            Times and walking distances are estimates based on typical speeds. SkiMaps does not know
+            Times and walking distances are estimates based on typical speeds
+            {liftCount ? ' - each lift includes about 4 minutes for the queue and getting on' : ''}. SkiMaps does not know
             whether a lift or piste is open today - check the resort's own status before you go.
           </Text>
         </>

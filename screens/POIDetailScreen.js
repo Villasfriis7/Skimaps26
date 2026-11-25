@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Share, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Share } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
+import { useBottomSpace } from '../utils/safeArea';
 import { styles, colors } from '../styles/styles';
 import { categoryMeta } from '../data/categoryMeta';
 import { useSavedPlaces } from '../context/SavedPlacesContext';
@@ -12,13 +13,7 @@ import { liftTypeLabels } from '../utils/pistes';
 import { defaultStart, easiestWay, reachText } from '../utils/reach';
 import { distanceMeters, formatDistance } from '../utils/geo';
 import { isOpenNow, formatOpeningHours } from '../utils/openingHours';
-import { websiteUrl, phoneUrl, openLink } from '../utils/links';
-
-// Link, der åbner stedet i telefonens egen kort-app (til "Share").
-const mapsLink = (place) =>
-  Platform.OS === 'ios'
-    ? `https://maps.apple.com/?ll=${place.latitude},${place.longitude}&q=${encodeURIComponent(place.name)}`
-    : `https://www.google.com/maps/search/?api=1&query=${place.latitude},${place.longitude}`;
+import { websiteUrl, phoneUrl, openLink, mapsLink, hoursSearchLink } from '../utils/links';
 
 function InfoRow({ icon, children }) {
   return (
@@ -40,6 +35,7 @@ function InfoRow({ icon, children }) {
 // beregnes ud fra data i stedet for at være skrevet i hånden.
 // Hjerte-knappen gemmer/fjerner stedet i AsyncStorage via SavedPlacesContext.
 export default function POIDetailScreen({ navigation, route }) {
+  const bottomSpace = useBottomSpace();
   const { poi } = route.params;
   const meta = categoryMeta[placeCategory(poi)] || categoryMeta.restaurant;
   const { isSaved, toggleSave } = useSavedPlaces();
@@ -76,10 +72,16 @@ export default function POIDetailScreen({ navigation, route }) {
       params: { focusPlaceId: poi.id, focusKey: Date.now() },
     });
 
-  const share = () =>
-    Share.share({ message: `${poi.name} (${meta.singular.toLowerCase()} in ${resort.name})\n${mapsLink(poi)}` }).catch(
-      () => {}
-    );
+  // Beskeden skal kunne bruges af dem, der får den: hvad er det, hvilken
+  // lift ligger det ved, og et kort-link, der virker på alle telefoner.
+  const share = () => {
+    const where = nearest
+      ? `, ${formatDistance(nearest.meters)} from the ${nearest.lift.name} ${(liftTypeLabels[nearest.lift.liftType] || 'lift').toLowerCase()}`
+      : '';
+    Share.share({
+      message: `${poi.name} - ${meta.singular.toLowerCase()} in ${resort.name}${where}\n${mapsLink(poi)}`,
+    }).catch(() => {});
+  };
 
   const actions = [
     onMap && { label: 'Map', icon: 'map-outline', onPress: showOnMap },
@@ -93,7 +95,7 @@ export default function POIDetailScreen({ navigation, route }) {
   ].filter(Boolean);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.scrollContent}>
+    <ScrollView style={styles.screen} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomSpace }]}>
       <StatusBar style="dark" />
 
       <View style={styles.detailHeader}>
@@ -188,9 +190,17 @@ export default function POIDetailScreen({ navigation, route }) {
               </Text>
             ))
           ) : (
-            <Text style={styles.infoTextMuted}>
-              Opening hours not listed{phone ? ' - call to check' : website ? ' - check the website' : ''}
-            </Text>
+            // De fleste steder i OpenStreetMap har ingen åbningstider. Så er
+            // rækken en genvej til at slå dem op i stedet for en blindgyde.
+            <TouchableOpacity
+              onPress={() => openLink(hoursSearchLink(poi, resort.name))}
+              accessibilityRole="link"
+              accessibilityLabel={`Opening hours not listed. Look up ${poi.name} online`}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.infoTextMuted}>Opening hours not listed</Text>
+              <Text style={styles.infoLink}>Look them up online</Text>
+            </TouchableOpacity>
           )}
         </InfoRow>
         {poi.phone ? (
@@ -200,7 +210,7 @@ export default function POIDetailScreen({ navigation, route }) {
         ) : null}
         {cuisine ? (
           <InfoRow icon="restaurant-outline">
-            <Text style={styles.infoText}>{cuisine}</Text>
+            <Text style={styles.infoText}>Cuisine: {cuisine.charAt(0).toLowerCase() + cuisine.slice(1)}</Text>
           </InfoRow>
         ) : null}
       </View>

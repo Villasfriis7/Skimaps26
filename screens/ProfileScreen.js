@@ -122,7 +122,9 @@ export default function ProfileScreen({ navigation }) {
             })}
           </View>
           <Text style={styles.routeHint}>
-            The hardest piste a route may use. Routes never send you down anything harder.
+            {skill === null
+              ? 'Not chosen yet. Pick the hardest piste a route may use - until then, routes show the easiest way.'
+              : 'The hardest piste a route may use. Routes never send you down anything harder.'}
           </Text>
         </View>
 

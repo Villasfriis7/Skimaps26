@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useResort } from '../context/ResortContext';
 import { searchSkiAreas, MAX_RESORT_RADIUS_M } from '../utils/resortData';
+import { useBottomSpace } from '../utils/safeArea';
 import { styles, colors } from '../styles/styles';
 
 const SEARCH_DELAY_MS = 450;
@@ -19,6 +20,7 @@ const SEARCH_DELAY_MS = 450;
 // Når et område er valgt, bygger appen navigationen forfra (se App.js), så
 // man lander på Explore i det nye område.
 export default function ResortPickerScreen() {
+  const bottomSpace = useBottomSpace();
   const { resort, bundledResorts, savedResorts, job, chooseResort, dismissJob, setPickerOpen, removeResort } =
     useResort();
   const [query, setQuery] = useState('');
@@ -156,7 +158,7 @@ export default function ResortPickerScreen() {
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={styles.scrollContent}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomSpace }]}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
     >

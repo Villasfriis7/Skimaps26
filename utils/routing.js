@@ -23,9 +23,11 @@ const PISTE_SPEED = {
   easy: 6,
   intermediate: 7,
   advanced: 6,
-  expert: 5,
-  extreme: 4,
-  freeride: 4,
+  expert: 4,
+  // Upræpareret terræn køres langsomt og med pauser: 500 højdemeter tager
+  // snarere et kvarter end fem minutter.
+  extreme: 2.5,
+  freeride: 2.5,
 };
 
 // Liftfart i m/s og fast tillæg i sekunder til kø + på-/afstigning.
@@ -45,6 +47,18 @@ const LIFT_OVERHEAD_S = 240;
 // køre ud til La Chaux på blå pister, men ikke komme hjem igen uden en rød.
 const TWO_WAY_LIFTS = new Set(['gondola', 'cable_car', 'mixed_lift']);
 
+// En skiløber tager kun liften NED, når der ikke er en pist: ellers ville
+// den hurtigste rute fra en top ofte være "tag kabelbanen ned igen". Tillægget
+// tæller kun med i valget af rute - ikke i den tid, vi viser.
+const RIDE_DOWN_PENALTY_S = 420;
+
+// Sværhedsgrader fra lettest til sværest - til "sværeste pist på ruten".
+const DIFFICULTY_ORDER = ['novice', 'easy', 'intermediate', 'advanced', 'expert', 'extreme', 'freeride'];
+
+// "Chaux Express" og "Chaux-Express" er samme lift, tegnet som to stykker.
+const sameLiftName = (a, b) =>
+  Boolean(a && b) && a.toLowerCase().replace(/[^a-z0-9]/g, '') === b.toLowerCase().replace(/[^a-z0-9]/g, '');
+
 const WALK_SPEED = 1.1; // m/s i skistøvler
 const WALK_DETOUR = 1.3; // fugleflugt -> faktisk gåafstand
 const TRANSFER_RADIUS_M = 120; // maks. afstand mellem to linjer, der "hænger sammen"
@@ -54,6 +68,9 @@ const SNAP_RADIUS_M = 600; // hvor langt fra netværket start/mål må ligge
 // sammen via pister, men man kan gå eller tage skibussen imellem dem.
 const VILLAGE_RADIUS_M = 1500;
 const VILLAGE_MAX_CLIMB_M = 80;
+// Uden ski: så langt går man mellem to lifter oppe på bjerget.
+const STATION_WALK_M = 350;
+const STATION_WALK_CLIMB_M = 40;
 // Gå-forbindelserne gælder kun stationer nede i byerne - ellers foreslog ruten
 // 2 km "gåture" mellem to liftstationer oppe på bjerget, hvor man ikke kan gå
 // i skistøvler. Hvad der er "i en by", afgør skiområdet selv via `isVillage`
@@ -121,18 +138,22 @@ class MinHeap {
   }
 }
 
-// Groft gitter (ca. 110 x 80 m pr. celle), så "hvilke knuder ligger tæt på
+// Groft gitter (ca. 110 x 50-80 m pr. celle), så "hvilke knuder ligger tæt på
 // dette punkt?" ikke kræver et gennemløb af alle knuder.
 const CELL = 0.001;
 const cellKey = (lat, lon) => `${Math.floor(lat / CELL)}:${Math.floor(lon / CELL)}`;
 
 function nodesNear(graph, point, radius) {
-  const reach = Math.ceil(radius / 75) + 1;
+  // En celle er 111 m høj overalt, men smallere jo længere mod nord: 77 m i
+  // Verbier, 50 m i Åre. Derfor regnes rækkevidden ud for stedets breddegrad.
+  const cellMeters = 111320 * CELL;
+  const latReach = Math.ceil(radius / cellMeters) + 1;
+  const lonReach = Math.ceil(radius / (cellMeters * Math.max(0.2, Math.cos((point.latitude * Math.PI) / 180)))) + 1;
   const baseLat = Math.floor(point.latitude / CELL);
   const baseLon = Math.floor(point.longitude / CELL);
   const found = [];
-  for (let dLat = -reach; dLat <= reach; dLat++) {
-    for (let dLon = -reach; dLon <= reach; dLon++) {
+  for (let dLat = -latReach; dLat <= latReach; dLat++) {
+    for (let dLon = -lonReach; dLon <= lonReach; dLon++) {
       const bucket = graph.grid.get(`${baseLat + dLat}:${baseLon + dLon}`);
       if (!bucket) continue;
       for (const index of bucket) {
@@ -144,7 +165,12 @@ function nodesNear(graph, point, radius) {
   return found;
 }
 
-export function buildGraph({ lifts, pistes, elevations = {}, isVillage = () => false }) {
+// `pedestrianLifts` er en liste med navne på de lifter, man må tage uden ski
+// (kun de områder, hvor vi har slået det op - se data/resorts/verbier.js).
+// Uden listen gætter vi: lifter med lukkede kabiner.
+export function buildGraph({ lifts, pistes, elevations = {}, isVillage = () => false, pedestrianLifts = null }) {
+  const walkOn = pedestrianLifts ? new Set(pedestrianLifts) : null;
+  const pedestrianOk = (lift) => (walkOn ? walkOn.has(lift.name) : TWO_WAY_LIFTS.has(lift.liftType));
   const graph = { nodes: [], edges: [], grid: new Map(), lineOf: [] };
   const indexByKey = new Map();
 
@@ -215,7 +241,13 @@ export function buildGraph({ lifts, pistes, elevations = {}, isVillage = () => f
     const top = nodeFor(flipped ? first : last, lift.id);
     const meters = distanceMeters(graph.nodes[bottom], graph.nodes[top]);
     const cost = LIFT_OVERHEAD_S + meters / speed;
-    const step = { kind: 'lift', id: lift.id, name: lift.name, liftType: lift.liftType };
+    const step = {
+      kind: 'lift',
+      id: lift.id,
+      name: lift.name,
+      liftType: lift.liftType,
+      pedestrian: pedestrianOk(lift),
+    };
     const coordinates = flipped ? [...lift.coordinates].reverse() : lift.coordinates;
     graph.edges[bottom].push({ to: top, cost, meters, step, coordinates });
     if (TWO_WAY_LIFTS.has(lift.liftType)) {
@@ -226,12 +258,24 @@ export function buildGraph({ lifts, pistes, elevations = {}, isVillage = () => f
         step: { ...step, down: true },
         coordinates: [...coordinates].reverse(),
       });
+    } else if (step.pedestrian) {
+      // En stolelift, fodgængere må tage: de skal også kunne komme ned igen.
+      // Skiløbere kører ned og får ikke denne mulighed (`walkersOnly`).
+      graph.edges[top].push({
+        to: bottom,
+        cost,
+        meters,
+        step: { ...step, down: true },
+        walkersOnly: true,
+        coordinates: [...coordinates].reverse(),
+      });
     }
     terminals.push({ index: bottom, lineId: lift.id });
     terminals.push({ index: top, lineId: lift.id });
     if (startElev !== undefined) {
-      stations.push({ index: bottom, elevation: Math.min(startElev, endElev), village: isVillage(graph.nodes[bottom]) });
-      stations.push({ index: top, elevation: Math.max(startElev, endElev), village: isVillage(graph.nodes[top]) });
+      const station = { pedestrian: step.pedestrian, liftId: lift.id };
+      stations.push({ ...station, index: bottom, elevation: Math.min(startElev, endElev), village: isVillage(graph.nodes[bottom]) });
+      stations.push({ ...station, index: top, elevation: Math.max(startElev, endElev), village: isVillage(graph.nodes[top]) });
     }
   }
 
@@ -264,9 +308,26 @@ export function buildGraph({ lifts, pistes, elevations = {}, isVillage = () => f
       const from = stations[a];
       const to = stations[b];
       if (from.index === to.index) continue;
+      const meters = distanceMeters(graph.nodes[from.index], graph.nodes[to.index]);
+      // Uden ski går man mellem to nabostationer oppe på bjerget ad den
+      // trampede sti (La Chaux: 230 m fra Chaux Express til Jumbo). Skiløbere
+      // får ikke den forbindelse - de kører.
+      if (
+        from.pedestrian &&
+        to.pedestrian &&
+        from.liftId !== to.liftId &&
+        meters > TRANSFER_RADIUS_M &&
+        meters <= STATION_WALK_M &&
+        Math.abs(from.elevation - to.elevation) <= STATION_WALK_CLIMB_M &&
+        !(from.village && to.village)
+      ) {
+        const edge = { cost: TRANSFER_OVERHEAD_S + walkSeconds(meters), meters: meters * WALK_DETOUR, step: walkStep, walkersOnly: true };
+        graph.edges[from.index].push({ ...edge, to: to.index });
+        graph.edges[to.index].push({ ...edge, to: from.index });
+        continue;
+      }
       if (!from.village || !to.village) continue;
       if (Math.abs(from.elevation - to.elevation) > VILLAGE_MAX_CLIMB_M) continue;
-      const meters = distanceMeters(graph.nodes[from.index], graph.nodes[to.index]);
       if (meters <= TRANSFER_RADIUS_M || meters > VILLAGE_RADIUS_M) continue;
       const cost = walkSeconds(meters);
       graph.edges[from.index].push({ to: to.index, cost, meters: meters * WALK_DETOUR, step: walkStep });
@@ -326,8 +387,9 @@ export function findRoute(graph, from, to, { skill = 'intermediate', convention 
     if (cost > dist[index]) continue;
     for (const edge of graph.edges[index]) {
       if (edge.step.kind === 'piste' && !allowed.has(edge.step.routeAs || edge.step.difficulty)) continue;
-      if (level.cabinsOnly && edge.step.kind === 'lift' && !TWO_WAY_LIFTS.has(edge.step.liftType)) continue;
-      const next = cost + edge.cost;
+      if (level.cabinsOnly && edge.step.kind === 'lift' && !edge.step.pedestrian) continue;
+      if (edge.walkersOnly && !level.cabinsOnly) continue;
+      const next = cost + edge.cost + (edge.step.down && !level.cabinsOnly ? RIDE_DOWN_PENALTY_S : 0);
       if (next < dist[edge.to]) {
         dist[edge.to] = next;
         prevNode[edge.to] = index;
@@ -391,24 +453,64 @@ export function findRoute(graph, from, to, { skill = 'intermediate', convention 
   // med navn, under 200 m uden - forbindelser mellem to pister) er bare støj
   // for brugeren. De tæller
   // stadig med i den samlede tid og tegnes stadig på kortet.
-  const visible = steps.filter((step) => {
+  const worthListing = (step) => {
     if (step.kind === 'walk') return step.meters >= 40;
     if (step.kind === 'piste') return step.meters >= (step.name ? 120 : 200);
     return true;
-  });
+  };
+  // ... men en kort rute, der KUN består af den slags stumper (150 m ned ad en
+  // pist til hotellet), skal stadig have trin - ellers stod der "du er der
+  // allerede" om et sted 150 m væk.
+  const visible = steps.some(worthListing) ? steps.filter(worthListing) : steps;
 
   // Når en skjult pist-stump lå mellem to gå-stykker, står de nu lige efter
   // hinanden i listen - slå dem sammen til ét.
   const listed = [];
+  const absorb = (into, step) => {
+    into.seconds += step.seconds;
+    into.meters += step.meters;
+    into.coordinates = [...into.coordinates, ...step.coordinates];
+  };
   for (const step of visible) {
     const last = listed[listed.length - 1];
+    const beforeLast = listed[listed.length - 2];
     if (last && last.kind === 'walk' && step.kind === 'walk') {
-      last.seconds += step.seconds;
-      last.meters += step.meters;
-      last.coordinates = [...last.coordinates, ...step.coordinates];
+      absorb(last, step);
+    } else if (step.kind === 'lift' && last && last.kind === 'lift' && sameLiftName(last.name, step.name)) {
+      // Én lift, tegnet som to stykker i OpenStreetMap (Chaux Express går op
+      // over en ryg og ned igen): for brugeren er det ét trin. Går det ene
+      // stykke op og det andet ned, er det bare "Take Chaux Express".
+      absorb(last, step);
+      last.down = Boolean(last.down && step.down);
+      last.joined = true;
+    } else if (
+      step.kind === 'lift' &&
+      last &&
+      last.kind === 'walk' &&
+      last.meters < 100 &&
+      beforeLast &&
+      beforeLast.kind === 'lift' &&
+      sameLiftName(beforeLast.name, step.name)
+    ) {
+      // ... også når der står et par skridt mellem de to stykker.
+      listed.pop();
+      absorb(beforeLast, last);
+      absorb(beforeLast, step);
+      beforeLast.down = Boolean(beforeLast.down && step.down);
+      beforeLast.joined = true;
     } else {
       listed.push({ ...step });
     }
+  }
+
+  // Sværeste pist på ruten - regnet på ALLE stykker, også de korte
+  // forbindelser, der ikke står i listen. Ellers kunne en rute hedde
+  // "hardest piste: Blue" og alligevel gå 150 m ad en rød.
+  let hardest = null;
+  for (const step of steps) {
+    if (step.kind !== 'piste') continue;
+    const difficulty = step.routeAs || step.difficulty;
+    if (!hardest || DIFFICULTY_ORDER.indexOf(difficulty) > DIFFICULTY_ORDER.indexOf(hardest)) hardest = difficulty;
   }
 
   return {
@@ -416,5 +518,6 @@ export function findRoute(graph, from, to, { skill = 'intermediate', convention 
     totalSeconds: steps.reduce((sum, step) => sum + step.seconds, 0),
     totalMeters: steps.reduce((sum, step) => sum + step.meters, 0),
     coordinates: steps.flatMap((step) => step.coordinates),
+    hardest,
   };
 }

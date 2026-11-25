@@ -205,18 +205,12 @@ describe('start og mål uden for netværket', () => {
 
   test('start og mål samme sted: en rute uden trin', () => {
     // RouteScreen viser "You are already there", når steps er tom.
-    expect(route(graph, V, V, 'easy')).toEqual({ steps: [], totalSeconds: 0, totalMeters: 0, coordinates: [] });
+    expect(route(graph, V, V, 'easy')).toEqual({ steps: [], totalSeconds: 0, totalMeters: 0, coordinates: [], hardest: null });
   });
 
-  // KENDT FEJL (utils/routing.js:130, nodesNear): gitteret, der finder knuder
-  // i nærheden, regner med, at en celle er mindst 75 m bred. Det passer i
-  // Alperne, men en celle er 0,001 længdegrad, og den bliver smallere mod
-  // nord: 54 m i Hemsedal (61° N) og 50 m i Åre (63° N). Derfor bliver et
-  // punkt 450-600 m ØST eller VEST for netværket regnet som "uden for
-  // skiområdet" i Skandinavien, selvom det samme punkt mod nord eller syd er
-  // inden for. Når fejlen er rettet, "fejler" denne test - lav den så om til
-  // en almindelig test().
-  test.failing('isOnNetwork virker også 550 m øst og vest for en lift i Åre (63° N)', () => {
+  // En celle i søge-gitteret er 0,001 længdegrad og dermed smallere mod nord (50 m i Åre).
+  // Før blev et punkt 450-600 m øst eller vest for netværket regnet som "uden for skiområdet".
+  test('isOnNetwork virker også 550 m øst og vest for en lift i Åre (63° N)', () => {
     const lift = { id: 'vm8', name: 'VM 8:an', liftType: 'chair_lift', coordinates: [pt(63.4, 13.08), pt(63.41, 13.08)] };
     const are = buildGraph({ lifts: [lift], pistes: [] });
     const metersPerDegree = distanceMeters(pt(63.4, 13), pt(63.4, 14));
@@ -245,7 +239,7 @@ describe('landets regler og pister uden sværhedsgrad', () => {
   test('Nordamerika: dobbelt sort ("expert") hører til det øverste niveau, ikke til "Black"', () => {
     const doubleBlack = { ...black, difficulty: 'expert' };
     // En lang blå udenom: langsommere end den dobbelt sorte, hurtigere end gondolen ned.
-    const scenic = { id: 'scenic', name: 'Scenic', difficulty: 'easy', coordinates: [T, pt(46.01, 7.012), V] };
+    const scenic = { id: 'scenic', name: 'Scenic', difficulty: 'easy', coordinates: [T, pt(46.01, 7.02), V] };
     const graph = buildGraph(
       network({ pistes: [scenic, doubleBlack], elevations: { ...elevations, scenic: [2200, 1500] } })
     );

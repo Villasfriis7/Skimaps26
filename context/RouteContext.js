@@ -11,6 +11,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Her ligger også brugerens niveau (den sværeste pist, de vil køre). Det
 // huskes mellem ruter og gemmes på telefonen, så man ikke skal vælge "Blue"
 // forfra hver gang.
+//   skill: 'none' | 'easy' | 'intermediate' | 'advanced' | 'freeride' | null
+// null betyder, at brugeren aldrig har valgt. Så gætter appen ikke på et
+// niveau (før stod der "Red", og en begynder fik en rød pist i sin første
+// rute) - rute-skærmen viser i stedet den letteste vej og beder om et valg.
 const RouteContext = createContext(null);
 const SKILL_KEY = 'skimaps.skill';
 const SKILLS = ['none', 'easy', 'intermediate', 'advanced', 'freeride'];
@@ -18,7 +22,7 @@ const SKILLS = ['none', 'easy', 'intermediate', 'advanced', 'freeride'];
 export function RouteProvider({ children }) {
   const [activeRoute, setActiveRoute] = useState(null);
   const clearRoute = useCallback(() => setActiveRoute(null), []);
-  const [skill, setSkillState] = useState('intermediate');
+  const [skill, setSkillState] = useState(null);
 
   useEffect(() => {
     AsyncStorage.getItem(SKILL_KEY)

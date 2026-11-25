@@ -48,6 +48,8 @@ function MainTabs() {
       backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
+        // Android: fanebjælken skal ikke flytte med op over tastaturet.
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: colors.primary,
         // Mørk nok til at kunne læses i sollys (4,7:1 mod hvid).
         tabBarInactiveTintColor: '#5f7884',

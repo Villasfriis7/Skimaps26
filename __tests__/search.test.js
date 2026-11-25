@@ -248,7 +248,7 @@ describe('search i Verbier (de rigtige data)', () => {
     const found = search(model, 'medran');
     expect(found.results.slice(0, 2).map((r) => `${r.kind}:${r.title}`)).toEqual(['lift:Médran 2', 'lift:Médran 4']);
     expect(titles(found)).toContain('Médran Café');
-    expect(found.results[0].subtitle).toBe('Gondola · 1529 → 2165 m');
+    expect(found.results[0].subtitle).toBe('Gondola · 1531 → 2200 m');
     // Med og uden accent giver det samme.
     expect(titles(search(model, 'Médran'))).toEqual(titles(found));
   });
@@ -283,11 +283,11 @@ describe('search i Verbier (de rigtige data)', () => {
     expect(search(model, 'wc')).toEqual({ results: [], total: 0, category: 'toilets' });
   });
 
-  test('"lifts" giver alle 47 lifter', () => {
+  test('"lifts" giver alle 45 lifter', () => {
     const found = search(model, 'lifts', 1000);
     expect(found.category).toBe('lifts');
     expect(found.results.filter((r) => r.kind === 'lift')).toHaveLength(model.lifts.length);
-    expect(model.lifts).toHaveLength(47);
+    expect(model.lifts).toHaveLength(45);
   });
 
   test('"sled" finder kælkebanen i La Tzoumaz', () => {
@@ -326,5 +326,47 @@ describe('search i Verbier (de rigtige data)', () => {
 
   test('ingen træf', () => {
     expect(search(model, 'xyzzy')).toEqual({ results: [], total: 0, category: null });
+  });
+});
+
+describe('søgning, som folk faktisk skriver (fra brugertesten)', () => {
+  const model = buildModel(verbier);
+  const first = (query, near) => {
+    const found = search(model, query, 25, near);
+    return found.results[0] ? `${found.results[0].kind}:${found.results[0].title}` : null;
+  };
+  const medran = { point: pt(46.0936, 7.2336), label: 'you' };
+
+  test('flere ord: hvert ord skal ramme navnet eller det, tingen er', () => {
+    expect(first('W hotel')).toBe('place:W Verbier');
+    expect(first('sled run')).toBe('piste:Piste de luge de La Tzoumaz');
+    expect(first('the dahu')).toBe('place:Le Dahu');
+    // Et ord, der hverken er navn eller kategori, giver stadig ingen træf.
+    expect(search(model, 'W zzzz').total).toBe(0);
+  });
+
+  test('et sted, hvis hele navn er skrevet, står før pisten af samme navn', () => {
+    const found = search(model, 'le rouge');
+    expect(found.results.slice(0, 2).map((r) => r.kind)).toEqual(['place', 'piste']);
+    expect(found.results[0].title).toBe('Le Rouge');
+  });
+
+  test('stavemåder af samme pist samles til én række', () => {
+    // "Chassoure-Tortin", "Chassoure - Tortin" og "Châssoure - Tortin" i OpenStreetMap.
+    const rows = search(model, 'chassoure').results.filter((r) => r.kind === 'piste');
+    const keys = rows.map((r) => `${fold(r.title).replace(/\s+/g, '')}|${r.data.difficulty}`);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  test('med brugerens position: nærmeste sted først, og afstanden står i rækken', () => {
+    const found = search(model, 'cafe', 25, medran);
+    const cafes = found.results.filter((r) => r.kind === 'place');
+    expect(cafes[0].subtitle).toMatch(/ from you$/);
+    // Inden for samme slags træf er rækkefølgen efter afstand.
+    const sameRank = cafes.filter((r) => r.rank === cafes[0].rank);
+    const meters = sameRank.map((r) => r.meters);
+    expect(meters).toEqual([...meters].sort((a, b) => a - b));
+    // Uden position: som før, afstanden til nærmeste lift.
+    expect(search(model, 'cafe').results.find((r) => r.kind === 'place').subtitle).toMatch(/ lift$/);
   });
 });

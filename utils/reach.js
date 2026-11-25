@@ -34,7 +34,13 @@ export function reachText(way, startLabel, convention) {
   if (!way || way.route.steps.length === 0) return null;
   const time = formatDuration(way.route.totalSeconds);
   const color = (difficulty) => shortDifficulty(difficulty, convention).toLowerCase();
-  if (way.level.id === 'none') return `${time} without skis from ${startLabel}`;
+  if (way.level.id === 'none') {
+    // "Uden ski" kan være en gåtur i byen eller tre gondolture - sig hvilken.
+    const lifts = way.route.steps.some((step) => step.kind === 'lift');
+    return lifts
+      ? `${time} by lift from ${startLabel} - no skiing needed`
+      : `${time} walk from ${startLabel}`;
+  }
   if (way.level.id === 'easy') return `${time} on ${color('easy')} pistes from ${startLabel}`;
   if (way.level.id === 'freeride') return `Only by an off-piste route · ${time} from ${startLabel}`;
   return `Needs a ${color(way.level.id)} piste · ${time} from ${startLabel}`;

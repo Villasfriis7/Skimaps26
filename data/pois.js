@@ -2,7 +2,10 @@
 // beskrivelse. Bruges af ExploreScreen (Featured), MapScreen (store nåle) og
 // POIDetailScreen.
 //
-// Koordinater og kontaktinfo er slået op i OpenStreetMap (november 2026).
+// Koordinater er slået op i OpenStreetMap (november 2026). Telefon,
+// hjemmeside, adresse og åbningstider er tjekket mod stedernes egne sider og
+// Verbier Tourisme den 25. november 2026; hvor kilderne var uenige eller
+// intet sagde, står feltet tomt.
 // Afstand til nærmeste lift og selve ruten er IKKE skrevet i hånden længere -
 // de beregnes ud fra liftdataene (utils/places.js og utils/routing.js), så de
 // ikke kan komme til at modsige kortet.
@@ -23,7 +26,7 @@ export const pois = [
     latitude: 46.10055,
     longitude: 7.23033,
     phone: '+41 27 771 80 00',
-    website: null,
+    website: 'https://www.lerouge-verbier.com/',
     openingHours: null,
   },
   {
@@ -36,7 +39,7 @@ export const pois = [
       'Classic mountain restaurant in the forest hamlet of Clambin, known for home-style food and a cosy atmosphere.',
     latitude: 46.08674,
     longitude: 7.23637,
-    address: 'Hameau de Clambin',
+    address: 'Hameau de Clambin 10',
     phone: '+41 27 771 25 24',
     website: 'https://www.chezdany.ch/',
     openingHours: 'Mo-Su 12:00-22:00',
@@ -48,11 +51,13 @@ export const pois = [
     tagline: 'Restaurant',
     featured: true,
     replaces: 'rest-54',
-    description: 'Restaurant on the hillside just above Verbier village.',
+    description:
+      'One of the oldest restaurants on the pistes of Verbier, at the top of the village right by the slope.',
     latitude: 46.10196,
     longitude: 7.24198,
-    phone: null,
-    website: null,
+    address: 'Route du Golf 95',
+    phone: '+41 27 771 55 55',
+    website: 'https://www.lecarrefour.ch/',
     openingHours: null,
   },
   {
@@ -62,7 +67,7 @@ export const pois = [
     tagline: 'Mountain hut',
     featured: true,
     description:
-      'Mountain hut at 2,457 m above La Chaux with panoramic views. A popular stop for confident skiers.',
+      'Mountain hut at 2,457 m above La Chaux with panoramic views. Reached on skis from Col des Gentianes or on the marked winter trail from La Chaux.',
     latitude: 46.08356,
     longitude: 7.28105,
     phone: '+41 77 269 45 27',
@@ -80,8 +85,9 @@ export const pois = [
     latitude: 46.08043,
     longitude: 7.26834,
     cuisine: 'regional',
-    phone: null,
-    website: null,
-    openingHours: null,
+    phone: '+41 27 778 20 00',
+    website: 'https://www.ledahu.ch/',
+    // Sæsonen 2026/27 ifølge stedets egen side.
+    openingHours: 'Dec 05-Apr 25 Mo-Su 08:30-16:15',
   },
 ];

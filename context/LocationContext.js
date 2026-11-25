@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 
 // Brugerens GPS-position, delt på tværs af appen (kortets "min position",
@@ -11,6 +12,9 @@ import * as Location from 'expo-location';
 const LocationContext = createContext(null);
 
 const LOCATE_TIMEOUT_MS = 10000;
+// På Android er "Balanced" kun wifi og mobilmaster - det kan være flere
+// hundrede meter forkert på et bjerg. Dér beder vi om GPS.
+const ACCURACY = Platform.OS === 'android' ? Location.Accuracy.High : Location.Accuracy.Balanced;
 
 const toPoint = (position) =>
   position ? { latitude: position.coords.latitude, longitude: position.coords.longitude } : null;
@@ -47,7 +51,7 @@ export function LocationProvider({ children }) {
     let subscription = null;
     let cancelled = false;
     Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.Balanced, distanceInterval: 20, timeInterval: 10000 },
+      { accuracy: ACCURACY, distanceInterval: 20, timeInterval: 10000 },
       (position) => setLocation(toPoint(position))
     )
       .then((sub) => {
@@ -81,7 +85,7 @@ export function LocationProvider({ children }) {
     let position = null;
     try {
       position = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
+        Location.getCurrentPositionAsync({ accuracy: ACCURACY }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), LOCATE_TIMEOUT_MS)),
       ]);
     } catch {

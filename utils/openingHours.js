@@ -13,6 +13,25 @@
 
 const DAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 
+// Det er dyrt at oprette en Intl-formatter (især på Android), og en liste med
+// 300 steder spørger om "åben nu" for hvert sted - så vi laver én pr. tidszone.
+const formatters = new Map();
+function formatterFor(timeZone) {
+  if (!formatters.has(timeZone)) {
+    formatters.set(
+      timeZone,
+      new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        weekday: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    );
+  }
+  return formatters.get(timeZone);
+}
+
 // "Mo-Th" / "Mo, Sa" / "Mo, Tu, Th-Sa" -> mængde af dagsindeks (Mo = 0).
 function parseDays(text) {
   const days = new Set();
@@ -72,13 +91,7 @@ export function parseOpeningHours(text) {
 export function resortTime(now = new Date(), timeZone = null) {
   if (timeZone) {
     try {
-      const parts = new Intl.DateTimeFormat('en-GB', {
-        timeZone,
-        weekday: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      }).formatToParts(now);
+      const parts = formatterFor(timeZone).formatToParts(now);
       const get = (type) => parts.find((p) => p.type === type)?.value;
       const day = DAYS.indexOf((get('weekday') || '').slice(0, 2));
       const minutes = (Number(get('hour')) % 24) * 60 + Number(get('minute'));

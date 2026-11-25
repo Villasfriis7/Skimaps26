@@ -12,28 +12,34 @@ og denne README er på dansk.
 
 ## Funktioner
 
-- **Explore** - overblik over skiområdet med rigtigt, live vejr (Open-Meteo), genveje og
+- **Explore** - overblik over skiområdet med rigtigt, live vejr (Open-Meteo), seks genveje og
   søgning på tværs af steder, lifter og pister. Søgningen ser bort fra accenter ("medran"
-  finder Médran) og forstår kategoriord som "hotels", "pizza" og "toilets".
+  finder Médran), forstår kategoriord som "hotels", "pizza" og "toilets" og flere ord ad
+  gangen ("w hotel", "sled run"). Står man i skiområdet, vises de nærmeste træf først.
 - **Steder som liste** - "Restaurants" og "Après-ski" åbner en liste med nærmeste først og
   "Open now", hvor åbningstiderne kendes. Listen kan filtreres til det, man kan nå uden ski
-  eller kun på blå pister.
+  eller kun på blå pister (så står rutens tid i hver række) og til steder oppe på bjerget.
 - **Map** - interaktivt kort over Verbier med ægte geodata fra OpenStreetMap/OpenSkiMap:
-  47 lifter, 144 km pister (farvet efter rigtig sværhedsgrad), 322 steder
+  45 lifter, 134 km pister (farvet efter rigtig sværhedsgrad), 322 steder
   (restauranter/caféer/après-ski/hoteller/ski rental) og 20 offentlige toiletter.
   Kortet fylder hele skærmen; søgefelt, filtre og knapper ligger oven på det.
   Baggrunden er et snedækket terrænkort i hele verden (hvidt relief med højdekurver og veje
   fra EOX), med telefonens eget kort nedenunder som reserve og til stednavne; en knap skifter
   til satellit. I Schweiz lægges swisstopos skarpere terrænskygge ovenpå.
   Stregtykkelse og detaljer følger zoom: på afstand er steder små prikker, tæt på får de
-  ikoner, og lifter og pister får navne. Et tryk på et sted, en lift, en pist, en ven eller
-  et toilet viser ét info-kort nederst med handlinger (rute, detaljer, gem); et tryk på
-  tomt kort lukker det. Signaturforklaringen ligger bag en knap.
+  ikoner, og lifter og pister får navne; steder, der ligger oven i hinanden, samles i en
+  klynge med et tal. Et tryk på et sted, en lift, en pist, en ven eller et toilet viser ét
+  info-kort nederst med handlinger (rute, detaljer, gem) - også pister og kælkebanen, som får
+  "Route to the top/start"; et tryk på tomt kort lukker det. Står man i skiområdet, åbner
+  kortet omkring ens egen position, som tegnes oven på alle andre markører.
+  Signaturforklaringen ligger bag en knap.
 - **Rutefinding** - "Route"/"Route here" beregner den hurtigste vej via lifter og pister
   til et sted, en lift, en ven eller et toilet: vælg startpunkt (din position eller en
   liftstation) og niveau - uden ski, blå, rød, sort eller off-piste - og få en
-  trin-for-trin-rute, som også kan vises på kortet. Niveauet huskes. Detaljesiden for et
-  sted fortæller, hvor svært det er at komme derhen ("Needs a red piste").
+  trin-for-trin-rute, som også kan vises på kortet. Niveauet huskes; har man aldrig valgt et,
+  vises den letteste vej, og appen beder en vælge. Mens ruten vises på kortet, står "Now" og
+  "Then" på rutekortet ud fra ens position. Detaljesiden for et sted fortæller, hvor svært det
+  er at komme derhen ("Needs a red piste", "27 min by lift - no skiing needed").
 - **Friends** - venneliste (eksempeldata, da appen ikke har login endnu). Vennerne vises på
   kortet, og afstanden til dem regnes ud fra din egen position.
 - **Partners** - rabatter hos lokale partnere, filtrérbart efter kategori. Tilbuddene er
@@ -68,14 +74,22 @@ nok til 5-10 områder. Meget store sammenhængende områder (over 16 km i radius
 
 `utils/routing.js` bygger en graf af lift- og pistedataene: hvert punkt på en pist og hver
 liftstation er en knude. Pister kan kun køres nedad, lifter kun opad (gondoler, kabelbaner og
-kombinerede lifter også ned - de er også de eneste, man kan tage uden ski), og liftstationer/pist-ender tæt på hinanden forbindes med korte gå-stykker.
-Derefter finder Dijkstras algoritme den hurtigste vej. Tiderne er skøn ud fra typiske
-ski- og lifthastigheder, og appen ved ikke, om en lift eller pist er åben i dag.
+kombinerede lifter også ned), og liftstationer/pist-ender tæt på hinanden forbindes med korte
+gå-stykker. Derefter finder Dijkstras algoritme den hurtigste vej. En skiløber sendes kun ned
+med en lift, når der ikke er en pist, der er højst syv minutter langsommere.
+
+Uden ski kan man tage lifter med lukkede kabiner. For Verbier er listen i stedet slået op hos
+liftselskabet (`pedestrianLifts` i `data/resorts/verbier.js`): den rummer også en stolelift,
+men ikke kabelbanen til Mont-Gelé, som kun betjener off-piste.
+
+Tiderne er skøn ud fra typiske ski- og lifthastigheder (hver lift tæller fire minutter til kø
+og påstigning), og appen ved ikke, om en lift eller pist er åben i dag.
 
 ## Rigtige datakilder (ikke hardcoded)
 
 - **Vejr:** Live data fra [Open-Meteo](https://open-meteo.com) for skiområdets landsby
-  (temperatur, snedybde, snefald, 6-dages udsigt). Hentes, når Explore-fanen åbnes, og
+  (temperatur, snedybde, snefald, 6-dages udsigt) og for midten og toppen af bjerget
+  (temperatur, vind, snedybde, frostgrænse). Hentes, når Explore-fanen åbnes, og
   igen når man vender tilbage til den, hvis tallene er over 10 minutter gamle.
 - **Gemte steder:** Brugeren kan trykke på hjerte-ikonet på et steds detaljeside for at
   gemme det. Gemte steder gemmes lokalt med `AsyncStorage` og huskes, selv efter appen
@@ -88,9 +102,13 @@ ski- og lifthastigheder, og appen ved ikke, om en lift eller pist er åben i dag
   også 14 stykker skitur-rute, 11 stykker kælkebane og 7 linjer uden sværhedsgrad; de
   tegnes med deres egen farve og indgår ikke i rutefindingen.
 - **Højder:** Start- og sluthøjde for hver lift og pist (`data/elevations.js`) er slået op
-  i Open-Meteos Elevation API.
+  i Open-Meteos Elevation API. Højdemodellen rammer op til 75 m forkert ved stejle toppe, så
+  de vigtigste stationer i Verbier har fået de officielle tal (`data/resorts/verbier.js`,
+  hvor også to "lifter", der ikke er skilifter, er taget ud).
 - **Åbningstider:** "Open now" på et steds detaljeside regnes ud fra OSM's åbningstider
-  (i Verbiers tidszone). Kun de almindelige formater forstås - ellers vises teksten uændret.
+  (i skiområdets tidszone). Kun de almindelige formater forstås - ellers vises teksten uændret.
+  Kun hvert femte spisested har åbningstider i OpenStreetMap; mangler de, er rækken en genvej
+  til at slå dem op på nettet.
 
 Mock-data (opdigtet eksempeldata): venner, partner-rabatter og brugerprofilen.
 
@@ -137,12 +155,11 @@ npx expo start
 
 ## Tests
 
-`npm test` kører knap 700 automatiske tests på 10-15 sekunder (Jest med `jest-expo`) - uden
+`npm test` kører godt 700 automatiske tests på 10-15 sekunder (Jest med `jest-expo`) - uden
 net og uden telefon. De dækker den rene logik i `utils/` og `data/weather.js`: rutefinding
 (i alle 11 indbyggede skiområder, fra hovedliften til hvert sted på hvert niveau), søgning,
 åbningstider, pistefarver pr. land, lagring af hentede områder og hentning fra
 OpenStreetMap/Open-Meteo med efterlignede svar (`__tests__/fixtures/`). Skærmene, kortet,
-`context/` og alt, der kræver en telefon (GPS, rigtige netværkskald), er ikke dækket. En test
-skrevet som `test.failing` beskriver en kendt fejl: når fejlen rettes, laves den om til `test`.
+`context/` og alt, der kræver en telefon (GPS, rigtige netværkskald), er ikke dækket.
 
 Demovideo: https://youtube.com/shorts/dreyhnMPcoo?is=fh6kMi-d8DRQtNp1

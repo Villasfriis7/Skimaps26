@@ -75,14 +75,15 @@ export default function FriendsScreen({ navigation }) {
             <Text style={styles.rowTitle}>Share my location</Text>
             <Text style={styles.rowSubtitle}>
               {sharing
-                ? 'Demo: nothing is sent - your position stays on this phone'
-                : 'Let friends see where you are on the mountain'}
+                ? 'On (demo) - nobody can see you. Your position stays on this phone.'
+                : 'Demo - nothing is shared yet. Later: only friends you add, and only while this is on.'}
             </Text>
           </View>
           <Switch
             value={sharing}
             onValueChange={toggleSharing}
             trackColor={{ true: colors.open, false: colors.border }}
+            thumbColor={colors.white}
             accessibilityLabel="Share my location"
           />
         </View>

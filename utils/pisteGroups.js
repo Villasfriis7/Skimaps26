@@ -17,6 +17,21 @@ const nameOf = (piste) =>
 //   group: { id, name, difficulty, kind, pistes: [stykker], meters, top, bottom }
 const JOIN_RADIUS_M = 80;
 
+// "Chassoure-Tortin", "Chassoure - Tortin" og "Châssoure - Tortin" er samme
+// pist, stavet på tre måder i OpenStreetMap.
+export function pisteNameKey(name) {
+  let text = String(name || '');
+  try {
+    text = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  } catch {
+    // normalize() mangler på enkelte ældre JavaScript-motorer.
+  }
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 const endsOf = (piste) => [piste.coordinates[0], piste.coordinates[piste.coordinates.length - 1]];
 
 // To stykker hænger sammen, hvis en ende af det ene ligger tæt på et punkt
@@ -45,7 +60,7 @@ export function buildPisteGroups(pistes, elevations = {}) {
     // En kælkebane er én bane, selvom OSM har givet stykkerne hver sin
     // sværhedsgrad - derfor tæller sværhedsgraden kun med for skipister.
     const kind = pisteKind(piste);
-    const key = kind === 'sled' ? `${name}|sled` : `${name}|${piste.difficulty}|${kind}`;
+    const key = kind === 'sled' ? `${pisteNameKey(name)}|sled` : `${pisteNameKey(name)}|${piste.difficulty}|${kind}`;
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key).push(piste);
   }
